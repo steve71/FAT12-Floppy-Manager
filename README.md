@@ -24,7 +24,7 @@ with the following contents:
 display-type = oled-128x64-rotate
 pin34 = nrdy
 ```
-
+On the Gotek just need a jumper on S0 or S1.  A second jumper is not needed.
 Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch USB 1.44M.  The Gotek replaced the existing floppy drive.
 
 ---
