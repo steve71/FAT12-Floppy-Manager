@@ -2,7 +2,7 @@
 
 ## Python PyQt GUI for managing FAT12 floppy disk images
 
-A modern, cross-platform GUI tool designed specifically for managing floppy disk images (.img) used in Yamaha keyboards like the **DGX-500**, **PSR series**, and **Clavinova** or other vintage keyboards.  Standard FAT12 format currently verified to work with Yamaha DGX-500.
+A modern GUI tool designed for managing FAT12 formatted floppy disk images (.img) used in Yamaha keyboards like the **DGX-500**, **PSR series**, and **Clavinova** or other vintage keyboards. Currently verified to work with Yamaha DGX-500.
 
 ---
 
@@ -20,8 +20,10 @@ with the following contents:
 display-type = oled-128x64-rotate
 pin34 = nrdy
 ```
-
+On the Gotek just need a jumper on S0 or S1.  A second jumper is not needed.
 Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch USB 1.44M.  The Gotek replaced the existing floppy drive.
+
+![Gotek in Yamaha DGX-500](https://github.com/user-attachments/assets/99f2c216-4d4d-4052-a2e7-d26f1c57cbdc)
 
 ---
 
