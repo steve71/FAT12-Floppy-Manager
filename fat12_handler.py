@@ -43,7 +43,7 @@ class FAT12Image:
         with open(self.image_path, 'rb') as f:
             boot_sector = f.read(512)
             
-        # parse BPB (BIOS Parameter Block)
+        # Parse BPB (BIOS Parameter Block)
         self.bytes_per_sector = struct.unpack('<H', boot_sector[11:13])[0]
         self.sectors_per_cluster = boot_sector[13]
         self.reserved_sectors = struct.unpack('<H', boot_sector[14:16])[0]
@@ -104,11 +104,11 @@ class FAT12Image:
             for i in range(self.root_entries):
                 entry_data = f.read(32)
                 
-                # check if entry is free or end of directory
+                # Check if entry is free or end of directory
                 if entry_data[0] == 0x00 or entry_data[0] == 0xE5:
                     continue
                 
-                # skip volume labels and long file name entries
+                # Skip volume labels and long file name entries
                 attr = entry_data[11]
                 if attr & 0x08:  # Volume label
                     continue
@@ -125,7 +125,7 @@ class FAT12Image:
                     size = struct.unpack('<I', entry_data[28:32])[0]
                     cluster = struct.unpack('<H', entry_data[26:28])[0]
                     
-                    # parse date/time
+                    # Parse date/time
                     date_val = struct.unpack('<H', entry_data[24:26])[0]
                     time_val = struct.unpack('<H', entry_data[22:24])[0]
                     
@@ -146,7 +146,7 @@ class FAT12Image:
         fat_data = self.read_fat()
         free_clusters = []
         
-        # start from cluster 2 (0 and 1 are reserved)
+        # Start from cluster 2 (0 and 1 are reserved)
         total_clusters = (self.total_sectors - (self.data_start // self.bytes_per_sector)) // self.sectors_per_cluster
         
         for cluster in range(2, total_clusters + 2):
@@ -159,15 +159,15 @@ class FAT12Image:
     
     def write_file_to_image(self, filename: str, data: bytes) -> bool:
         """Write a file to the disk image"""
-        # calculate clusters needed
+        # Calculate clusters needed
         clusters_needed = (len(data) + self.bytes_per_cluster - 1) // self.bytes_per_cluster
         
-        # find free clusters
+        # Find free clusters
         free_clusters = self.find_free_clusters(clusters_needed)
         if len(free_clusters) < clusters_needed:
             return False
         
-        # find free directory entry
+        # Find free directory entry
         with open(self.image_path, 'r+b') as f:
             f.seek(self.root_start)
             entry_index = -1
@@ -181,17 +181,17 @@ class FAT12Image:
             if entry_index == -1:
                 return False
             
-            # prepare filename (8.3 format)
+            # Prepare filename (8.3 format)
             base_name = Path(filename).stem.upper()[:8].ljust(8)
             extension = Path(filename).suffix.lstrip('.').upper()[:3].ljust(3)
             
-            # create directory entry
+            # Create directory entry
             entry = bytearray(32)
             entry[0:8] = base_name.encode('ascii')
             entry[8:11] = extension.encode('ascii')
             entry[11] = 0x20  # Archive attribute
             
-            # set date/time (current)
+            # Set date/time (current)
             now = datetime.datetime.now()
             date_val = ((now.year - 1980) << 9) | (now.month << 5) | now.day
             time_val = (now.hour << 11) | (now.minute << 5) | (now.second // 2)
@@ -201,23 +201,23 @@ class FAT12Image:
             entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster
             entry[28:32] = struct.pack('<I', len(data))  # File size
             
-            # write directory entry
+            # Write directory entry
             f.seek(self.root_start + (entry_index * 32))
             f.write(entry)
             
-            # write file data to clusters
+            # Write file data to clusters
             offset = 0
             fat_data = self.read_fat()
             
             for i, cluster in enumerate(free_clusters):
-                # write data
+                # Write data
                 cluster_offset = self.data_start + ((cluster - 2) * self.bytes_per_cluster)
                 f.seek(cluster_offset)
                 chunk = data[offset:offset + self.bytes_per_cluster]
                 f.write(chunk)
                 offset += len(chunk)
                 
-                # update FAT
+                # Update FAT
                 if i < len(free_clusters) - 1:
                     self.set_fat_entry(fat_data, cluster, free_clusters[i + 1])
                 else:
@@ -231,12 +231,12 @@ class FAT12Image:
     def delete_file(self, entry: dict) -> bool:
         """Delete a file from the image"""
         try:
-            # mark directory entry as deleted
+            # Mark directory entry as deleted
             with open(self.image_path, 'r+b') as f:
                 f.seek(self.root_start + (entry['index'] * 32))
                 f.write(b'\xE5')
             
-            # free clusters in FAT
+            # Free clusters in FAT
             if entry['cluster'] >= 2:
                 fat_data = self.read_fat()
                 current_cluster = entry['cluster']
@@ -284,7 +284,7 @@ class FAT12Image:
         Args:
             filepath: Path where the image file will be created
         """
-        # standard 1.44 MB floppy parameters
+        # Standard 1.44 MB floppy parameters
         bytes_per_sector = 512
         sectors_per_cluster = 1
         reserved_sectors = 1
@@ -300,16 +300,16 @@ class FAT12Image:
         total_size = total_sectors * bytes_per_sector
         
         with open(filepath, 'wb') as f:
-            # write zeros for entire image
+            # Write zeros for entire image
             f.write(b'\x00' * total_size)
             
-            # go back to start to write boot sector
+            # Go back to start to write boot sector
             f.seek(0)
             
-            # create boot sector
+            # Create boot sector
             boot_sector = bytearray(512)
             
-            # jump instruction
+            # Jump instruction
             boot_sector[0:3] = b'\xEB\x3C\x90'
             
             # OEM name
@@ -327,30 +327,30 @@ class FAT12Image:
             boot_sector[24:26] = sectors_per_track.to_bytes(2, 'little')  # Sectors per track
             boot_sector[26:28] = heads.to_bytes(2, 'little')  # Number of heads
             
-            # boot signature
+            # Boot signature
             boot_sector[510:512] = b'\x55\xAA'
             
             f.write(boot_sector)
             
-            # initialize FAT tables
+            # Initialize FAT tables
             fat_start = reserved_sectors * bytes_per_sector
             fat_size = sectors_per_fat * bytes_per_sector
             
-            # create initial FAT (mark first two entries)
+            # Create initial FAT (mark first two entries)
             fat_data = bytearray(fat_size)
-            # first entry: media descriptor
+            # First entry: media descriptor
             fat_data[0] = media_descriptor
             fat_data[1] = 0xFF
             fat_data[2] = 0xFF
             
-            # write both FAT copies
+            # Write both FAT copies
             for i in range(num_fats):
                 f.seek(fat_start + (i * fat_size))
                 f.write(fat_data)
 
 
 if __name__ == "__main__":
-    # test with the FAT12 floppy image
+    # Test with the FAT12 floppy image
     import sys
     
     image_path = "./fat12floppy.img"
