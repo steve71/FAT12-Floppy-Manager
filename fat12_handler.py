@@ -37,6 +37,47 @@ class FAT12Image:
     def __init__(self, image_path: str):
         self.image_path = image_path
         self.load_boot_sector()
+    
+    @staticmethod
+    def decode_fat_time(time_value: int) -> str:
+        """Decode FAT time format to HH:MM:SS string
+        
+        Bits 15-11: Hours (0-23)
+        Bits 10-5: Minutes (0-59)
+        Bits 4-0: Seconds/2 (0-29, multiply by 2 to get actual seconds)
+        """
+        hours = (time_value >> 11) & 0x1F
+        minutes = (time_value >> 5) & 0x3F
+        seconds = (time_value & 0x1F) * 2
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    
+    @staticmethod
+    def decode_fat_date(date_value: int) -> str:
+        """Decode FAT date format to YYYY-MM-DD string
+        
+        Bits 15-9: Year (0 = 1980, 127 = 2107)
+        Bits 8-5: Month (1-12)
+        Bits 4-0: Day (1-31)
+        """
+        year = ((date_value >> 9) & 0x7F) + 1980
+        month = (date_value >> 5) & 0x0F
+        day = date_value & 0x1F
+        
+        # Handle invalid dates
+        if month < 1 or month > 12 or day < 1 or day > 31:
+            return "Invalid"
+        
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    
+    @staticmethod
+    def encode_fat_time(dt: datetime.datetime) -> int:
+        """Encode datetime to FAT time format"""
+        return (dt.hour << 11) | (dt.minute << 5) | (dt.second // 2)
+    
+    @staticmethod
+    def encode_fat_date(dt: datetime.datetime) -> int:
+        """Encode datetime to FAT date format"""
+        return ((dt.year - 1980) << 9) | (dt.month << 5) | dt.day
         
     def load_boot_sector(self):
         """Read and parse the boot sector"""
@@ -194,8 +235,8 @@ class FAT12Image:
                 if name and name[0] not in ('.', '\x00'):
                     full_name = f"{name}.{ext}" if ext else name
                     
-                    creation_time_tenth = entry_data[13], # Tenth of a second
-                    creation_time = struct.unpack('<H', entry_data[14:16])[0] # 2 second resolution
+                    creation_time_tenth = entry_data[13]  # Tenth of a second
+                    creation_time = struct.unpack('<H', entry_data[14:16])[0]  # 2 second resolution
                     creation_date = struct.unpack('<H', entry_data[16:18])[0]
                     
                     last_accessed_date = struct.unpack('<H', entry_data[18:20])[0]
@@ -216,7 +257,15 @@ class FAT12Image:
 
                     size = struct.unpack('<I', entry_data[28:32])[0]
 
-                    nt_case_info = entry_data[12] # NT Case Info (Offset 12)
+                    nt_case_info = entry_data[12]  # NT Case Info (Offset 12)
+                    
+                    # Decode dates and times to human-readable format
+                    creation_datetime_str = f"{self.decode_fat_date(creation_date)} {self.decode_fat_time(creation_time)}"
+                    if creation_time_tenth > 0:
+                        creation_datetime_str += f".{creation_time_tenth * 10:02d}"
+                    
+                    last_accessed_str = self.decode_fat_date(last_accessed_date)
+                    last_modified_datetime_str = f"{self.decode_fat_date(last_modified_date)} {self.decode_fat_time(last_modified_time)}"
                     
                     entries.append({
                         'name': full_name,
@@ -229,13 +278,17 @@ class FAT12Image:
                         'is_volume_id': bool(attr & 0x08),
                         'is_dir': bool(attr & 0x10),
                         'is_archive': bool(attr & 0x20),
+                        'attributes': attr,
                         'nt_case_info': nt_case_info,
                         'creation_time': creation_time,
                         'creation_time_tenth': creation_time_tenth,
-                        'created_date': creation_date,
+                        'creation_date': creation_date,
+                        'creation_datetime_str': creation_datetime_str,
                         'last_accessed_date': last_accessed_date,
+                        'last_accessed_str': last_accessed_str,
                         'last_modified_time': last_modified_time,
                         'last_modified_date': last_modified_date,
+                        'last_modified_datetime_str': last_modified_datetime_str,
                     })
         
         return entries
@@ -293,9 +346,20 @@ class FAT12Image:
             
             # Set date/time (current)
             now = datetime.datetime.now()
-            last_modified_time = (now.hour << 11) | (now.minute << 5) | (now.second // 2)
-            last_modified_date = ((now.year - 1980) << 9) | (now.month << 5) | now.day
+            creation_time = self.encode_fat_time(now)
+            creation_date = self.encode_fat_date(now)
+            last_modified_time = creation_time
+            last_modified_date = creation_date
             
+            # Set creation time and date
+            entry[13] = 0  # Creation time tenth
+            entry[14:16] = struct.pack('<H', creation_time)
+            entry[16:18] = struct.pack('<H', creation_date)
+            
+            # Set last access date
+            entry[18:20] = struct.pack('<H', creation_date)
+            
+            # Set last modified time and date
             entry[22:24] = struct.pack('<H', last_modified_time)
             entry[24:26] = struct.pack('<H', last_modified_date)
             entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster
@@ -488,6 +552,9 @@ if __name__ == "__main__":
     if entries:
         for e in entries:
             print(f"  {e['name']:12} {e['size']:8,} bytes  Cluster: {e['cluster']}")
+            print(f"    Created:       {e['creation_datetime_str']}")
+            print(f"    Last Accessed: {e['last_accessed_str']}")
+            print(f"    Last Modified: {e['last_modified_datetime_str']}")
     else:
         print("  (empty)")
     
