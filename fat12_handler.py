@@ -22,13 +22,13 @@
 
 """
 FAT12 Filesystem Handler
-Core functionality for reading/writing FAT12 floppy disk images
+Core functionality for reading/writing FAT12 floppy disk images with VFAT long filename support
 """
 
 import struct
 import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 class FAT12Image:
@@ -78,6 +78,214 @@ class FAT12Image:
     def encode_fat_date(dt: datetime.datetime) -> int:
         """Encode datetime to FAT date format"""
         return ((dt.year - 1980) << 9) | (dt.month << 5) | dt.day
+    
+    @staticmethod
+    def is_valid_83_char(char: str) -> bool:
+        """Check if character is valid in 8.3 filename (Windows compatible)"""
+        # Valid characters: A-Z, 0-9, and special chars
+        # Windows allows: ! # $ % & ' ( ) - @ ^ _ ` { } ~
+        # Windows does NOT allow: space + , . ; = [ ]
+        if char.isalnum():
+            return True
+        valid_special = "!#$%&'()-@^_`{}~"
+        return char in valid_special
+    
+    @staticmethod
+    def generate_83_name(long_name: str, existing_names: List[str] = None, use_numeric_tail: bool = False) -> str:
+        """Generate a valid 8.3 filename from a long filename (Windows-compatible behavior)
+        
+        Windows 8.3 name generation algorithm:
+        1. Convert to uppercase
+        2. Remove leading/trailing spaces and dots
+        3. Replace invalid characters with nothing (remove them)
+        4. Remove all embedded spaces
+        5. Truncate base name to fit with ~N tail if needed
+        6. Keep first 3 chars of extension
+        
+        Args:
+            long_name: The original long filename
+            existing_names: List of existing 8.3 names to avoid collisions (11-byte format)
+            use_numeric_tail: Whether to use numeric tails (~1, ~2, etc.) for uniqueness
+            
+        Returns:
+            Valid 8.3 filename (11 bytes, no dot)
+        """
+        if existing_names is None:
+            existing_names = []
+        
+        # Split name and extension
+        path_obj = Path(long_name)
+        name = path_obj.stem
+        ext = path_obj.suffix.lstrip('.')
+        
+        # Convert to uppercase
+        name = name.upper()
+        ext = ext.upper()
+        
+        # Remove leading and trailing spaces/dots
+        name = name.strip(' .')
+        ext = ext.strip(' .')
+        
+        # Remove invalid characters (including spaces)
+        name = ''.join(c for c in name if FAT12Image.is_valid_83_char(c))
+        ext = ''.join(c for c in ext if FAT12Image.is_valid_83_char(c))
+        
+        # Take first 3 characters of extension
+        ext = ext[:3]
+        
+        # Check if original name is already valid 8.3
+        # Valid 8.3 means:
+        # - 8 or fewer chars in base name
+        # - 3 or fewer chars in extension
+        # - No invalid characters
+        # - No spaces
+        original_name_upper = path_obj.stem.upper()
+        original_ext_upper = path_obj.suffix.lstrip('.').upper()
+        
+        is_already_valid_83 = (
+            1 <= len(original_name_upper) <= 8 and
+            0 <= len(original_ext_upper) <= 3 and
+            ' ' not in original_name_upper and
+            ' ' not in original_ext_upper and
+            '.' not in original_name_upper and
+            '.' not in original_ext_upper and
+            all(FAT12Image.is_valid_83_char(c) for c in original_name_upper) and
+            all(FAT12Image.is_valid_83_char(c) for c in original_ext_upper)
+        )
+        
+        if is_already_valid_83:
+            # Just uppercase and pad - no numeric tail needed
+            base_name = original_name_upper[:8].ljust(8)
+            ext_name = original_ext_upper[:3].ljust(3)
+            return base_name + ext_name
+        
+        # Name needs modification
+        if not use_numeric_tail:
+            # Simple truncation without numeric tail (like Linux mount -o nonumtail)
+            base_name = name[:8].ljust(8)
+            ext_name = ext.ljust(3)
+            return base_name + ext_name
+        
+        # Windows-style numeric tail generation
+        # Windows uses first 6 chars + ~1, then tries ~2, ~3, etc.
+        # For ~10 and higher, it uses 5 chars + ~10, etc.
+        
+        # Try different tail numbers
+        for tail_num in range(1, 1000000):
+            tail = f"~{tail_num}"
+            
+            # Calculate how many chars we can use from base name
+            if tail_num < 10:
+                # ~1 through ~9: use 6 chars + ~N = 8 chars total
+                max_base_chars = 6
+            elif tail_num < 100:
+                # ~10 through ~99: use 5 chars + ~NN = 8 chars total
+                max_base_chars = 5
+            elif tail_num < 1000:
+                # ~100 through ~999: use 4 chars + ~NNN = 8 chars total
+                max_base_chars = 4
+            else:
+                # ~1000 and up: use 3 chars + ~NNNN = 8 chars total
+                max_base_chars = 3
+            
+            # Truncate base to fit
+            truncated_base = name[:max_base_chars]
+            candidate_base = (truncated_base + tail).ljust(8)
+            candidate_ext = ext.ljust(3)
+            candidate = candidate_base + candidate_ext
+            
+            if candidate not in existing_names:
+                return candidate
+        
+        # Fallback (should never reach here in practice)
+        return (name[:8].ljust(8) + ext.ljust(3))
+    
+    @staticmethod
+    def calculate_lfn_checksum(short_name: bytes) -> int:
+        """Calculate checksum for LFN entries
+        
+        Args:
+            short_name: 11-byte short filename (8.3 format, no dot)
+            
+        Returns:
+            Checksum byte
+        """
+        checksum = 0
+        for byte in short_name:
+            checksum = ((checksum >> 1) | (checksum << 7)) & 0xFF
+            checksum = (checksum + byte) & 0xFF
+        return checksum
+    
+    @staticmethod
+    def create_lfn_entries(long_name: str, short_name: bytes) -> List[bytes]:
+        """Create LFN (Long File Name) directory entries
+        
+        Args:
+            long_name: The long filename
+            short_name: The 8.3 short name (11 bytes, no dot)
+            
+        Returns:
+            List of 32-byte LFN entries (in reverse order, ready to write)
+        """
+        checksum = FAT12Image.calculate_lfn_checksum(short_name)
+        
+        # Encode to UTF-16LE
+        lfn_unicode = long_name.encode('utf-16le')
+        
+        # Add null terminator
+        lfn_unicode += b'\x00\x00'
+        
+        # Pad with 0xFF to make it a multiple of 26 bytes
+        remainder = len(lfn_unicode) % 26
+        if remainder != 0:
+            lfn_unicode += b'\xFF\xFF' * ((26 - remainder) // 2)
+        
+        # Split into 13-character chunks (26 bytes each)
+        entries = []
+        num_entries = len(lfn_unicode) // 26
+        
+        for i in range(num_entries):
+            entry = bytearray(32)
+            
+            # Sequence number (last entry has 0x40 OR'd)
+            # seq = num_entries - i
+            # if i == 0:
+            #     seq |= 0x40  # Mark as last LFN entry
+            seq = i + 1
+            if i == num_entries - 1:
+                seq |= 0x40
+                
+            entry[0] = seq
+            
+            # Get this chunk's characters (26 bytes = 13 UTF-16 chars)
+            chunk_start = i * 26
+            chunk = lfn_unicode[chunk_start:chunk_start + 26]
+            
+            # Characters 1-5 (bytes 1-10)
+            entry[1:11] = chunk[0:10]
+            
+            # Attribute (0x0F = LFN)
+            entry[11] = 0x0F
+            
+            # Type (0 = sub-component of long name)
+            entry[12] = 0
+            
+            # Checksum
+            entry[13] = checksum
+            
+            # Characters 6-11 (bytes 14-25)
+            entry[14:26] = chunk[10:22]
+            
+            # First cluster (always 0 for LFN)
+            entry[26:28] = b'\x00\x00'
+            
+            # Characters 12-13 (bytes 28-31)
+            entry[28:32] = chunk[22:26]
+            
+            entries.append(bytes(entry))
+        
+        # Return in reverse order (LFN entries are written before the short entry)
+        return list(reversed(entries))
         
     def load_boot_sector(self):
         """Read and parse the boot sector"""
@@ -104,45 +312,22 @@ class FAT12Image:
         if total_sectors_short != 0:
             self.total_sectors = total_sectors_short
         else:
-            # 2. If 0, read the 32-bit total sectors at 0x20
             self.total_sectors = struct.unpack('<I', boot_sector[32:36])[0]
 
-        #
         # Extended BIOS Parameter Block (EBPB)
-        #
-
-        # Drive Number (Offset 36)
         self.drive_number = boot_sector[36] 
-
-        # Reserved/Current Head (Offset 37) - Usually 0
         self.reserved_ebpb = boot_sector[37]
-
-        # Boot Signature (Offset 38)
-        # If this is 0x28 or 0x29, the following fields are valid
         self.boot_signature = boot_sector[38]
-
-        # Volume ID / Serial Number (Offset 39)
         self.volume_id = struct.unpack('<I', boot_sector[39:43])[0]
-
-        # Volume Label (Offset 43 to 54)
         self.volume_label = boot_sector[43:54].decode('ascii', errors='ignore').rstrip()
-
-        # File System Type (Offset 54 to 62)
-        # Should determine the FAT type by calculating the number of clusters, 
-        # not by reading this string
         self.fs_type_from_EBPB = boot_sector[54:62].decode('ascii', errors='ignore').strip()
 
         # Fixed Regions
         self.fat_start = self.reserved_sectors * self.bytes_per_sector
         fat_region_size = self.num_fats * self.sectors_per_fat * self.bytes_per_sector
         self.root_start = self.fat_start + fat_region_size
-
-        # The Root Directory is fixed in size only for FAT12/16
         self.root_size = (self.root_entries * 32)
-
-        # Data area always starts after the Root Directory area
         self.data_start = self.root_start + self.root_size
-
         self.bytes_per_cluster = self.bytes_per_sector * self.sectors_per_cluster
 
         # Calculate number of clusters in the data area
@@ -174,12 +359,9 @@ class FAT12Image:
     
     def get_fat_entry(self, fat_data: bytearray, cluster: int) -> int:
         """Get FAT12 entry for a cluster"""
-        # Offset to the fat entry for the cluster
         offset = cluster + (cluster // 2)
         value = struct.unpack('<H', fat_data[offset:offset+2])[0]
         
-        # If the last bit of a binary number is 1, it is odd, else it is even
-        # If the cluster is odd, the value is in the upper 4 bits
         if cluster & 1:
             return value >> 4
         else:
@@ -187,12 +369,9 @@ class FAT12Image:
     
     def set_fat_entry(self, fat_data: bytearray, cluster: int, value: int):
         """Set FAT12 entry for a cluster"""
-        # Offset to the fat entry for the cluster
         offset = cluster + (cluster // 2)
         current = struct.unpack('<H', fat_data[offset:offset+2])[0]
         
-        # If the last bit of a binary number is 1, it is odd, else it is even
-        # If the cluster is odd, the value is in the upper 4 bits
         if cluster & 1:
             new_value = (current & 0x000F) | (value << 4)
         else:
@@ -201,27 +380,73 @@ class FAT12Image:
         fat_data[offset:offset+2] = struct.pack('<H', new_value)
     
     def read_root_directory(self) -> List[dict]:
-        """Read root directory entries"""
+        """Read root directory entries with VFAT long filename support"""
         entries = []
         
         with open(self.image_path, 'rb') as f:
             f.seek(self.root_start)
             
+            # LFN accumulator
+            lfn_parts = []
+            lfn_checksum = None
+            
             for i in range(self.root_entries):
                 entry_data = f.read(32)
                 
-                # Check if entry is end of directory or free (deleted)
-                if entry_data[0] == 0x00 or entry_data[0] == 0xE5:
+                # Check if entry is end of directory
+                if entry_data[0] == 0x00:
+                    break
+                    
+                # Check if entry is free (deleted)
+                if entry_data[0] == 0xE5:
+                    lfn_parts = []
+                    lfn_checksum = None
                     continue
                 
-                # Skip volume labels and long file name entries
                 attr = entry_data[11]
-                if attr & 0x08:  # Volume label
-                    continue
-                if attr == 0x0F:  # LFN entry
+                
+                # Check if this is an LFN entry
+                if attr == 0x0F:
+                    seq = entry_data[0]
+                    checksum = entry_data[13]
+                    
+                    # Extract characters
+                    chars = bytearray()
+                    chars.extend(entry_data[1:11])   # First 5 chars (10 bytes)
+                    chars.extend(entry_data[14:26])  # Next 6 chars (12 bytes)
+                    chars.extend(entry_data[28:32])  # Last 2 chars (4 bytes)
+                    
+                    try:
+                        text = chars.decode('utf-16le')
+                        # Stop at null terminator or 0xFF padding
+                        null_pos = text.find('\x00')
+                        if null_pos != -1:
+                            text = text[:null_pos]
+                        text = text.replace('\uffff', '')  # Remove 0xFFFF padding
+                        
+                        # Check if this is the last LFN entry (has 0x40 bit set)
+                        # LFN entries are stored in reverse order in the directory
+                        if seq & 0x40:
+                            # This is the last entry, start fresh
+                            lfn_parts = [text]
+                            lfn_checksum = checksum
+                        else:
+                            # This is a continuation, append to the end
+                            # (we're reading backwards through the entries)
+                            lfn_parts.append(text)
+                    except:
+                        lfn_parts = []
+                        lfn_checksum = None
+                    
                     continue
                 
-                # Parse entry
+                # Skip volume labels
+                if attr & 0x08:
+                    lfn_parts = []
+                    lfn_checksum = None
+                    continue
+                
+                # This is a regular 8.3 entry
                 name = entry_data[0:8].decode('ascii', errors='ignore').strip()
                 ext = entry_data[8:11].decode('ascii', errors='ignore').strip()
 
@@ -230,36 +455,42 @@ class FAT12Image:
                 if raw_name[0] == 0x05:
                     raw_name[0] = 0xE5
                 name = bytes(raw_name).decode('ascii', errors='ignore').strip()
-                ext = entry_data[8:11].decode('ascii', errors='ignore').strip()
                 
                 if name and name[0] not in ('.', '\x00'):
-                    full_name = f"{name}.{ext}" if ext else name
+                    short_name_83 = f"{name}.{ext}" if ext else name
                     
-                    creation_time_tenth = entry_data[13]  # Tenth of a second
-                    creation_time = struct.unpack('<H', entry_data[14:16])[0]  # 2 second resolution
+                    # Check if we have a valid LFN for this entry
+                    long_name = None
+                    if lfn_parts and lfn_checksum is not None:
+                        # Verify checksum
+                        short_name_bytes = entry_data[0:11]
+                        calculated_checksum = self.calculate_lfn_checksum(short_name_bytes)
+                        
+                        if calculated_checksum == lfn_checksum:
+                            # LFN entries are stored in reverse order, so reverse the list
+                            long_name = ''.join(reversed(lfn_parts))
+                    
+                    # Use long name if available, otherwise use short name
+                    display_name = long_name if long_name else short_name_83
+                    
+                    creation_time_tenth = entry_data[13]
+                    creation_time = struct.unpack('<H', entry_data[14:16])[0]
                     creation_date = struct.unpack('<H', entry_data[16:18])[0]
-                    
                     last_accessed_date = struct.unpack('<H', entry_data[18:20])[0]
-                    
-                    # Parse date/time
-                    # last modified date
                     last_modified_time = struct.unpack('<H', entry_data[22:24])[0]
                     last_modified_date = struct.unpack('<H', entry_data[24:26])[0]
 
-                    # Check your filesystem type (usually determined via the Boot Sector/BPB)
                     if self.fat_type == 'FAT32':
                         hi_cluster = struct.unpack('<H', entry_data[20:22])[0]
                     else:
-                        hi_cluster = 0  # Ignore reserved bytes in FAT12/16
+                        hi_cluster = 0
 
                     lo_cluster = struct.unpack('<H', entry_data[26:28])[0]
                     cluster = (hi_cluster << 16) | lo_cluster
-
                     size = struct.unpack('<I', entry_data[28:32])[0]
-
-                    nt_case_info = entry_data[12]  # NT Case Info (Offset 12)
+                    nt_case_info = entry_data[12]
                     
-                    # Decode dates and times to human-readable format
+                    # Decode dates and times
                     creation_datetime_str = f"{self.decode_fat_date(creation_date)} {self.decode_fat_time(creation_time)}"
                     if creation_time_tenth > 0:
                         creation_datetime_str += f".{creation_time_tenth * 10:02d}"
@@ -268,7 +499,8 @@ class FAT12Image:
                     last_modified_datetime_str = f"{self.decode_fat_date(last_modified_date)} {self.decode_fat_time(last_modified_time)}"
                     
                     entries.append({
-                        'name': full_name,
+                        'name': display_name,
+                        'short_name': short_name_83,
                         'size': size,
                         'cluster': cluster,
                         'index': i,
@@ -290,6 +522,10 @@ class FAT12Image:
                         'last_modified_date': last_modified_date,
                         'last_modified_datetime_str': last_modified_datetime_str,
                     })
+                
+                # Reset LFN accumulator
+                lfn_parts = []
+                lfn_checksum = None
         
         return entries
     
@@ -298,107 +534,189 @@ class FAT12Image:
         fat_data = self.read_fat()
         free_clusters = []
         
-        # Total data clusters available on the disk
         total_clusters = (self.total_sectors - (self.data_start // self.bytes_per_sector)) // self.sectors_per_cluster
         
         for cluster in range(2, total_clusters + 2):
             if self.get_fat_entry(fat_data, cluster) == 0:
                 free_clusters.append(cluster)
-                # Only break if a specific count was requested
                 if count is not None and len(free_clusters) >= count:
                     break
         
         return free_clusters
     
-    def write_file_to_image(self, filename: str, data: bytes) -> bool:
-        """Write a file to the disk image"""
+    def get_existing_83_names(self) -> List[str]:
+        """Get list of all existing 8.3 names in the root directory"""
+        names = []
+        
+        with open(self.image_path, 'rb') as f:
+            f.seek(self.root_start)
+            
+            for i in range(self.root_entries):
+                entry_data = f.read(32)
+                
+                if entry_data[0] in (0x00, 0xE5):
+                    continue
+                
+                attr = entry_data[11]
+                
+                # Skip LFN entries and volume labels
+                if attr == 0x0F or (attr & 0x08):
+                    continue
+                
+                # Get the 8.3 name (11 bytes, no dot)
+                short_name = entry_data[0:11]
+                names.append(bytes(short_name).decode('ascii', errors='ignore'))
+        
+        return names
+    
+    def write_file_to_image(self, filename: str, data: bytes, use_numeric_tail: bool = False) -> bool:
+        """Write a file to the disk image with VFAT long filename support
+        
+        Args:
+            filename: Original filename (can be long)
+            data: File data
+            use_numeric_tail: Whether to use numeric tails for 8.3 name generation
+            
+        Returns:
+            True if successful, False otherwise
+        """
         # Calculate clusters needed
         clusters_needed = (len(data) + self.bytes_per_cluster - 1) // self.bytes_per_cluster
+        if clusters_needed == 0:
+            clusters_needed = 1  # Even empty files need at least one cluster
         
         # Find free clusters
         free_clusters = self.find_free_clusters(clusters_needed)
         if len(free_clusters) < clusters_needed:
             return False
         
-        # Find free directory entry
+        # Get existing 8.3 names to avoid collisions
+        existing_83_names = self.get_existing_83_names()
+        
+        # Generate 8.3 name
+        short_name_83 = self.generate_83_name(filename, existing_83_names, use_numeric_tail)
+        short_name_bytes = short_name_83.encode('ascii')[:11]  # 11 bytes, no dot
+        
+        # Determine if we need LFN entries
+        # Reconstruct what the short name looks like with a dot
+        short_with_dot = short_name_83[:8].strip() + '.' + short_name_83[8:11].strip()
+        short_with_dot = short_with_dot.rstrip('.')
+        
+        # Need LFN if original name is different from short name (case-insensitive)
+        needs_lfn = filename.upper() != short_with_dot.upper()
+        
+        # Create LFN entries if needed
+        lfn_entries = []
+        if needs_lfn:
+            lfn_entries = self.create_lfn_entries(filename, short_name_bytes)
+        
+        # Calculate total entries needed
+        total_entries_needed = len(lfn_entries) + 1  # LFN entries + short entry
+        
+        # Find contiguous free directory entries
         with open(self.image_path, 'r+b') as f:
             f.seek(self.root_start)
             entry_index = -1
+            consecutive_free = 0
+            start_index = -1
             
             for i in range(self.root_entries):
                 entry_data = f.read(32)
                 if entry_data[0] in (0x00, 0xE5):
-                    entry_index = i
-                    break
+                    if consecutive_free == 0:
+                        start_index = i
+                    consecutive_free += 1
+                    
+                    if consecutive_free >= total_entries_needed:
+                        entry_index = start_index
+                        break
+                else:
+                    consecutive_free = 0
+                    start_index = -1
             
             if entry_index == -1:
                 return False
             
-            # Prepare filename (8.3 format)
-            base_name = Path(filename).stem.upper()[:8].ljust(8)
-            extension = Path(filename).suffix.lstrip('.').upper()[:3].ljust(3)
+            # Write LFN entries (if any)
+            for i, lfn_entry in enumerate(lfn_entries):
+                f.seek(self.root_start + ((entry_index + i) * 32))
+                f.write(lfn_entry)
             
-            # Create directory entry
+            # Create short directory entry
             entry = bytearray(32)
-            entry[0:8] = base_name.encode('ascii')
-            entry[8:11] = extension.encode('ascii')
+            entry[0:11] = short_name_bytes
             entry[11] = 0x20  # Archive attribute
             
             # Set date/time (current)
             now = datetime.datetime.now()
             creation_time = self.encode_fat_time(now)
             creation_date = self.encode_fat_date(now)
-            last_modified_time = creation_time
-            last_modified_date = creation_date
             
-            # Set creation time and date
             entry[13] = 0  # Creation time tenth
             entry[14:16] = struct.pack('<H', creation_time)
             entry[16:18] = struct.pack('<H', creation_date)
+            entry[18:20] = struct.pack('<H', creation_date)  # Last access date
+            entry[22:24] = struct.pack('<H', creation_time)  # Last modified time
+            entry[24:26] = struct.pack('<H', creation_date)  # Last modified date
             
-            # Set last access date
-            entry[18:20] = struct.pack('<H', creation_date)
-            
-            # Set last modified time and date
-            entry[22:24] = struct.pack('<H', last_modified_time)
-            entry[24:26] = struct.pack('<H', last_modified_date)
-            entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster
+            if len(data) > 0:
+                entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster
+            else:
+                entry[26:28] = struct.pack('<H', 0)  # No cluster for empty files
+                
             entry[28:32] = struct.pack('<I', len(data))  # File size
             
-            # Write directory entry
-            f.seek(self.root_start + (entry_index * 32))
+            # Write short directory entry
+            short_entry_index = entry_index + len(lfn_entries)
+            f.seek(self.root_start + (short_entry_index * 32))
             f.write(entry)
             
-            # Write file data to clusters
-            offset = 0
-            fat_data = self.read_fat()
-            
-            for i, cluster in enumerate(free_clusters):
-                # Write data
-                cluster_offset = self.data_start + ((cluster - 2) * self.bytes_per_cluster)
-                f.seek(cluster_offset)
-                chunk = data[offset:offset + self.bytes_per_cluster]
-                f.write(chunk)
-                offset += len(chunk)
+            # Write file data to clusters (if not empty)
+            if len(data) > 0:
+                offset = 0
+                fat_data = self.read_fat()
                 
-                # Update FAT
-                if i < len(free_clusters) - 1:
-                    self.set_fat_entry(fat_data, cluster, free_clusters[i + 1])
-                else:
-                    self.set_fat_entry(fat_data, cluster, 0xFFF)  # End of file
-            
-            # Write FAT
-            self.write_fat(fat_data)
+                for i, cluster in enumerate(free_clusters):
+                    # Write data
+                    cluster_offset = self.data_start + ((cluster - 2) * self.bytes_per_cluster)
+                    f.seek(cluster_offset)
+                    chunk = data[offset:offset + self.bytes_per_cluster]
+                    f.write(chunk)
+                    offset += len(chunk)
+                    
+                    # Update FAT
+                    if i < len(free_clusters) - 1:
+                        self.set_fat_entry(fat_data, cluster, free_clusters[i + 1])
+                    else:
+                        self.set_fat_entry(fat_data, cluster, 0xFFF)  # End of file
+                
+                # Write FAT
+                self.write_fat(fat_data)
         
         return True
     
     def delete_file(self, entry: dict) -> bool:
-        """Delete a file from the image"""
+        """Delete a file from the image (including LFN entries)"""
         try:
-            # Mark directory entry as deleted
             with open(self.image_path, 'r+b') as f:
+                # Mark the short entry as deleted
                 f.seek(self.root_start + (entry['index'] * 32))
                 f.write(b'\xE5')
+                
+                # Look backwards for LFN entries
+                index = entry['index'] - 1
+                while index >= 0:
+                    f.seek(self.root_start + (index * 32))
+                    entry_data = f.read(32)
+                    
+                    # Check if this is an LFN entry
+                    if entry_data[11] == 0x0F:
+                        # Mark as deleted
+                        f.seek(self.root_start + (index * 32))
+                        f.write(b'\xE5')
+                        index -= 1
+                    else:
+                        break
             
             # Free clusters in FAT
             if entry['cluster'] >= 2:
@@ -443,12 +761,7 @@ class FAT12Image:
     
     @staticmethod
     def create_blank_image(filepath: str):
-        """Create a blank FAT12 floppy disk image (1.44 MB)
-        
-        Args:
-            filepath: Path where the image file will be created
-        """
-        # Standard 1.44 MB floppy parameters
+        """Create a blank FAT12 floppy disk image (1.44 MB)"""
         bytes_per_sector = 512
         sectors_per_cluster = 1
         reserved_sectors = 1
@@ -460,109 +773,37 @@ class FAT12Image:
         sectors_per_track = 18
         heads = 2
         
-        # Create image file
         total_size = total_sectors * bytes_per_sector
         
         with open(filepath, 'wb') as f:
-            # Write zeros for entire image
             f.write(b'\x00' * total_size)
-            
-            # Go back to start to write boot sector
             f.seek(0)
             
-            # Create boot sector
             boot_sector = bytearray(512)
-            
-            # Jump instruction
             boot_sector[0:3] = b'\xEB\x3C\x90'
-            
-            # OEM name
             boot_sector[3:11] = b'MSDOS5.0'
-            
-            # BPB (BIOS Parameter Block)
-            boot_sector[11:13] = bytes_per_sector.to_bytes(2, 'little')  # Bytes per sector
-            boot_sector[13] = sectors_per_cluster  # Sectors per cluster
-            boot_sector[14:16] = reserved_sectors.to_bytes(2, 'little')  # Reserved sectors
-            boot_sector[16] = num_fats  # Number of FATs
-            boot_sector[17:19] = root_entries.to_bytes(2, 'little')  # Root entries
-            boot_sector[19:21] = total_sectors.to_bytes(2, 'little')  # Total sectors
-            boot_sector[21] = media_descriptor  # Media descriptor
-            boot_sector[22:24] = sectors_per_fat.to_bytes(2, 'little')  # Sectors per FAT
-            boot_sector[24:26] = sectors_per_track.to_bytes(2, 'little')  # Sectors per track
-            boot_sector[26:28] = heads.to_bytes(2, 'little')  # Number of heads
-            
-            # Boot signature
+            boot_sector[11:13] = bytes_per_sector.to_bytes(2, 'little')
+            boot_sector[13] = sectors_per_cluster
+            boot_sector[14:16] = reserved_sectors.to_bytes(2, 'little')
+            boot_sector[16] = num_fats
+            boot_sector[17:19] = root_entries.to_bytes(2, 'little')
+            boot_sector[19:21] = total_sectors.to_bytes(2, 'little')
+            boot_sector[21] = media_descriptor
+            boot_sector[22:24] = sectors_per_fat.to_bytes(2, 'little')
+            boot_sector[24:26] = sectors_per_track.to_bytes(2, 'little')
+            boot_sector[26:28] = heads.to_bytes(2, 'little')
             boot_sector[510:512] = b'\x55\xAA'
             
             f.write(boot_sector)
             
-            # Initialize FAT tables
             fat_start = reserved_sectors * bytes_per_sector
             fat_size = sectors_per_fat * bytes_per_sector
             
-            # Create initial FAT (mark first two entries)
             fat_data = bytearray(fat_size)
-            # First entry: media descriptor
             fat_data[0] = media_descriptor
             fat_data[1] = 0xFF
             fat_data[2] = 0xFF
             
-            # Write both FAT copies
             for i in range(num_fats):
                 f.seek(fat_start + (i * fat_size))
                 f.write(fat_data)
-
-
-if __name__ == "__main__":
-    # Test with the FAT12 floppy image
-    import sys
-    
-    image_path = "./fat12floppy.img"
-    
-    print("Testing FAT12 Image Handler")
-    print("=" * 50)
-    
-    img = FAT12Image(image_path)
-    
-    print("\nBoot Sector Information:")
-    print(f"  OEM name: {img.oem_name}")
-    print(f"  Bytes per sector: {img.bytes_per_sector}")
-    print(f"  Sectors per cluster: {img.sectors_per_cluster}")
-    print(f"  Reserved sectors: {img.reserved_sectors}")
-    print(f"  Number of FATs: {img.num_fats}")
-    print(f"  Root entries: {img.root_entries}")
-    print(f"  Total sectors: {img.total_sectors}")
-    print(f"  Media descriptor: 0x{img.media_descriptor:02X}")
-    print(f"  Sectors per FAT: {img.sectors_per_fat}")
-    print(f"  Sectors per track: {img.sectors_per_track}")
-    print(f"  Number of heads: {img.number_of_heads}")
-    print(f"  Number of hidden sectors: {img.hidden_sectors}")
-
-    print("\nExtended BIOS Parameter Block (EBPB):")
-    print(f"  Drive number: {img.drive_number} (0x{img.drive_number:02X})")
-    print(f"  Reserved/current head: {img.reserved_ebpb}")
-    boot_sig_status = "Valid" if img.boot_signature == 0x29 else "Invalid/Old"
-    print(f"  Boot signature: 0x{img.boot_signature:02X} ({boot_sig_status})")
-    print(f"  Volume ID: 0x{img.volume_id:08X}")
-    print(f"  Volume label: {img.volume_label}")
-    print(f"  File system type: {img.fs_type}")
-    
-    print("\nDirectory Contents:")
-    entries = img.read_root_directory()
-    if entries:
-        for e in entries:
-            print(f"  {e['name']:12} {e['size']:8,} bytes  Cluster: {e['cluster']}")
-            print(f"    Created:       {e['creation_datetime_str']}")
-            print(f"    Last Accessed: {e['last_accessed_str']}")
-            print(f"    Last Modified: {e['last_modified_datetime_str']}")
-    else:
-        print("  (empty)")
-    
-    free = len(img.find_free_clusters())
-    free_bytes = free * img.bytes_per_cluster
-    total_bytes = img.total_sectors * img.bytes_per_sector
-    
-    print(f"\nDisk Space:")
-    print(f"  Total capacity: {total_bytes:,} bytes ({total_bytes / 1024 / 1024:.2f} MB)")
-    print(f"  Free space: {free_bytes:,} bytes ({free_bytes / 1024:.2f} KB)")
-    print(f"  Free clusters: {free}")

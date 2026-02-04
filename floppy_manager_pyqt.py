@@ -22,7 +22,7 @@
 
 """
 FAT12 Floppy Disk Image Manager
-A modern GUI tool for managing files on FAT12 floppy disk images
+A modern GUI tool for managing files on FAT12 floppy disk images with VFAT LFN support
 """
 
 import sys
@@ -182,9 +182,10 @@ class RootDirectoryViewer(QDialog):
         
         # Table
         table = QTableWidget()
-        table.setColumnCount(13)
+        table.setColumnCount(14)
         table.setHorizontalHeaderLabels([
-            'Filename', 
+            'Filename (Long)', 
+            'Filename (8.3)',
             'Size (bytes)', 
             'First Cluster',
             'Attributes',
@@ -206,38 +207,41 @@ class RootDirectoryViewer(QDialog):
         # Populate table
         table.setRowCount(len(entries))
         for i, entry in enumerate(entries):
-            # Filename
+            # Long filename
             table.setItem(i, 0, QTableWidgetItem(entry['name']))
+            
+            # Short filename (8.3)
+            table.setItem(i, 1, QTableWidgetItem(entry['short_name']))
             
             # Size
             size_item = QTableWidgetItem(f"{entry['size']:,}")
             size_item.setData(Qt.ItemDataRole.UserRole, entry['size'])  # For sorting
-            table.setItem(i, 1, size_item)
+            table.setItem(i, 2, size_item)
             
             # First Cluster
-            table.setItem(i, 2, QTableWidgetItem(str(entry['cluster'])))
+            table.setItem(i, 3, QTableWidgetItem(str(entry['cluster'])))
             
             # Attributes (hex)
-            table.setItem(i, 3, QTableWidgetItem(f"0x{entry['attributes']:02X}"))
+            table.setItem(i, 4, QTableWidgetItem(f"0x{entry['attributes']:02X}"))
             
             # Creation date/time
-            table.setItem(i, 4, QTableWidgetItem(entry['creation_datetime_str']))
+            table.setItem(i, 5, QTableWidgetItem(entry['creation_datetime_str']))
             
             # Last accessed
-            table.setItem(i, 5, QTableWidgetItem(entry['last_accessed_str']))
+            table.setItem(i, 6, QTableWidgetItem(entry['last_accessed_str']))
             
             # Last modified
-            table.setItem(i, 6, QTableWidgetItem(entry['last_modified_datetime_str']))
+            table.setItem(i, 7, QTableWidgetItem(entry['last_modified_datetime_str']))
             
             # Attribute flags
-            table.setItem(i, 7, QTableWidgetItem('Yes' if entry['is_read_only'] else 'No'))
-            table.setItem(i, 8, QTableWidgetItem('Yes' if entry['is_hidden'] else 'No'))
-            table.setItem(i, 9, QTableWidgetItem('Yes' if entry['is_system'] else 'No'))
-            table.setItem(i, 10, QTableWidgetItem('Yes' if entry['is_dir'] else 'No'))
-            table.setItem(i, 11, QTableWidgetItem('Yes' if entry['is_archive'] else 'No'))
+            table.setItem(i, 8, QTableWidgetItem('Yes' if entry['is_read_only'] else 'No'))
+            table.setItem(i, 9, QTableWidgetItem('Yes' if entry['is_hidden'] else 'No'))
+            table.setItem(i, 10, QTableWidgetItem('Yes' if entry['is_system'] else 'No'))
+            table.setItem(i, 11, QTableWidgetItem('Yes' if entry['is_dir'] else 'No'))
+            table.setItem(i, 12, QTableWidgetItem('Yes' if entry['is_archive'] else 'No'))
             
             # Index
-            table.setItem(i, 12, QTableWidgetItem(str(entry['index'])))
+            table.setItem(i, 13, QTableWidgetItem(str(entry['index'])))
         
         # Resize columns
         header = table.horizontalHeader()
@@ -262,6 +266,7 @@ class FloppyManagerWindow(QMainWindow):
         self.settings = QSettings('FAT12FloppyManager', 'Settings')
         self.confirm_delete = self.settings.value('confirm_delete', True, type=bool)
         self.confirm_replace = self.settings.value('confirm_replace', True, type=bool)
+        self.use_numeric_tail = self.settings.value('use_numeric_tail', False, type=bool)
 
         # Restore window geometry if available
         geometry = self.settings.value('window_geometry')
@@ -288,7 +293,7 @@ class FloppyManagerWindow(QMainWindow):
     def setup_ui(self):
         """Create the user interface"""
         self.setWindowTitle("FAT12 Floppy Manager")
-        self.setGeometry(100, 100, 900, 600)
+        self.setGeometry(100, 100, 1000, 600)
 
         # Enable drag and drop
         self.setAcceptDrops(True)
@@ -341,13 +346,13 @@ class FloppyManagerWindow(QMainWindow):
 
         layout.addLayout(toolbar)
 
-        # File table
+        # File table - now with 5 columns
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(['Filename', 'Size', 'Type', 'Index'])
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(['Filename', 'Short Name (8.3)', 'Size', 'Type', 'Index'])
 
         # Hide the index column (used internally)
-        self.table.setColumnHidden(3, True)
+        self.table.setColumnHidden(4, True)
 
         # Configure table
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -358,9 +363,10 @@ class FloppyManagerWindow(QMainWindow):
 
         # Set column widths
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Filename
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Short name
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Size
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Type
 
         # Double-click to extract
         self.table.doubleClicked.connect(self.extract_selected)
@@ -436,6 +442,15 @@ class FloppyManagerWindow(QMainWindow):
         self.confirm_replace_action.triggered.connect(self.toggle_confirm_replace)
         settings_menu.addAction(self.confirm_replace_action)
 
+        settings_menu.addSeparator()
+
+        self.use_numeric_tail_action = QAction("Use numeric tails for 8.3 names (~1, ~2, etc.)", self)
+        self.use_numeric_tail_action.setCheckable(True)
+        self.use_numeric_tail_action.setChecked(self.use_numeric_tail)
+        self.use_numeric_tail_action.setToolTip("When enabled, uses Windows-style numeric tails (e.g., LONGFI~1.TXT). When disabled, simply truncates names (like Linux nonumtail option).")
+        self.use_numeric_tail_action.triggered.connect(self.toggle_numeric_tail)
+        settings_menu.addAction(self.use_numeric_tail_action)
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
 
@@ -452,6 +467,19 @@ class FloppyManagerWindow(QMainWindow):
         """Toggle replace confirmation"""
         self.confirm_replace = self.confirm_replace_action.isChecked()
         self.settings.setValue('confirm_replace', self.confirm_replace)
+
+    def toggle_numeric_tail(self):
+        """Toggle numeric tail usage for 8.3 name generation"""
+        self.use_numeric_tail = self.use_numeric_tail_action.isChecked()
+        self.settings.setValue('use_numeric_tail', self.use_numeric_tail)
+        
+        # Show info message
+        if self.use_numeric_tail:
+            mode_desc = "Windows-style numeric tails enabled (e.g., LONGFI~1.TXT)"
+        else:
+            mode_desc = "Simple truncation mode enabled (like Linux nonumtail)"
+        
+        self.status_bar.showMessage(f"8.3 name generation: {mode_desc}")
 
     def table_key_press(self, event):
         """Handle keyboard events in the table"""
@@ -495,19 +523,22 @@ class FloppyManagerWindow(QMainWindow):
                     row = self.table.rowCount()
                     self.table.insertRow(row)
 
-                    # Filename
+                    # Filename (long name)
                     self.table.setItem(row, 0, QTableWidgetItem(entry['name']))
+
+                    # Short name (8.3)
+                    self.table.setItem(row, 1, QTableWidgetItem(entry['short_name']))
 
                     # Size
                     size_str = f"{entry['size']:,} bytes"
-                    self.table.setItem(row, 1, QTableWidgetItem(size_str))
+                    self.table.setItem(row, 2, QTableWidgetItem(size_str))
 
                     # Type
                     file_type = Path(entry['name']).suffix.upper().lstrip('.')
-                    self.table.setItem(row, 2, QTableWidgetItem(file_type))
+                    self.table.setItem(row, 3, QTableWidgetItem(file_type))
 
                     # Index (hidden)
-                    self.table.setItem(row, 3, QTableWidgetItem(str(entry['index'])))
+                    self.table.setItem(row, 4, QTableWidgetItem(str(entry['index'])))
 
             # Update info
             free_clusters = len(self.image.find_free_clusters())
@@ -579,50 +610,62 @@ class FloppyManagerWindow(QMainWindow):
                 with open(filepath, 'rb') as f:
                     data = f.read()
 
-                #
-                # Calculate the 8.3 filename that will be written to disk
-                #
-                
                 path_obj = Path(filepath)
+                original_name = path_obj.name
 
-                # Get stem, uppercase, truncate to 8 chars, then strip whitespace
-                stem = path_obj.stem.upper()[:8].strip()
+                # Get existing 8.3 names
+                existing_83_names = self.image.get_existing_83_names()
+                
+                # Generate the 8.3 name that will be used
+                short_name_83 = FAT12Image.generate_83_name(
+                    original_name, 
+                    existing_83_names, 
+                    self.use_numeric_tail
+                )
+                
+                # Format 8.3 name for display (add dot back)
+                short_display = short_name_83[:8].strip() + '.' + short_name_83[8:11].strip()
+                short_display = short_display.rstrip('.')
 
-                # Get extension, remove dot, uppercase, truncate to 3 chars, strip whitespace
-                suffix = path_obj.suffix.lstrip('.').upper()[:3].strip()
-
-                # Form the target filename as it appears in the existing file list
-                target_filename = f"{stem}.{suffix}" if suffix else stem
-
-                # Check if file already exists using the target filename
-                existing = self.image.read_root_directory()
-
-                # Find the specific entry that collides, if any
-                collision_entry = next((e for e in existing if e['name'] == target_filename), None)
+                # Check if file already exists
+                existing_entries = self.image.read_root_directory()
+                collision_entry = None
+                
+                # Check both long name and short name
+                for e in existing_entries:
+                    e_short_83 = e['short_name'].replace('.', '').ljust(11).upper()
+                    if e_short_83 == short_name_83:
+                        collision_entry = e
+                        break
 
                 if collision_entry:
                     if self.confirm_replace:
+                        msg = f"The file '{original_name}' will be saved with 8.3 name '{short_display}', which already exists"
+                        if collision_entry['name'] != collision_entry['short_name']:
+                            msg += f" (long name: '{collision_entry['name']}')"
+                        msg += ".\n\nDo you want to replace it?"
+                        
                         response = QMessageBox.question(
                             self,
                             "File Exists",
-                            f"The file '{path_obj.name}' will be saved as '{target_filename}', which already exists.\n\nDo you want to replace it?",
+                            msg,
                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                         )
                         if response == QMessageBox.StandardButton.No:
                             continue
 
-                    # Delete the existing file found by the 8.3 match
+                    # Delete the existing file
                     self.image.delete_file(collision_entry)
 
                 # Write the new file
-                if self.image.write_file_to_image(path_obj.name, data):
+                if self.image.write_file_to_image(original_name, data, self.use_numeric_tail):
                     success_count += 1
                 else:
                     fail_count += 1
                     QMessageBox.warning(
                         self,
                         "Error",
-                        f"Failed to write {path_obj.name} - disk may be full"
+                        f"Failed to write {original_name} - disk may be full"
                     )
 
             except Exception as e:
@@ -656,12 +699,13 @@ class FloppyManagerWindow(QMainWindow):
         success_count = 0
 
         for row in selected_rows:
-            entry_index = int(self.table.item(row, 3).text())
+            entry_index = int(self.table.item(row, 4).text())
             entry = next((e for e in entries if e['index'] == entry_index), None)
 
             if entry:
                 try:
                     data = self.image.extract_file(entry)
+                    # Use the long filename (original name) when extracting
                     output_path = os.path.join(save_dir, entry['name'])
 
                     with open(output_path, 'wb') as f:
@@ -702,7 +746,7 @@ class FloppyManagerWindow(QMainWindow):
         success_count = 0
 
         for row in selected_rows:
-            entry_index = int(self.table.item(row, 3).text())
+            entry_index = int(self.table.item(row, 4).text())
             entry = next((e for e in entries if e['index'] == entry_index), None)
 
             if entry:
@@ -769,7 +813,6 @@ class FloppyManagerWindow(QMainWindow):
 
         try:
             # Copy the current image file
-            import shutil
             shutil.copy2(self.image_path, filename)
 
             QMessageBox.information(
@@ -797,20 +840,22 @@ class FloppyManagerWindow(QMainWindow):
     def show_about(self):
         """Show about dialog"""
         about_text = """<h2>FAT12 Floppy Manager</h2>
-        <p><b>Version 1.1</b></p>
+        <p><b>Version 2.0</b></p>
 
-        <p>A modern tool for managing files on FAT12 floppy disk images.</p>
+        <p>A modern tool for managing files on FAT12 floppy disk images with VFAT long filename support.</p>
 
         <p><b>Features:</b></p>
         <ul>
-        <li>FAT12 filesystem support</li>
+        <li>FAT12 filesystem support with VFAT long filenames</li>
+        <li>Windows-compatible 8.3 name generation with numeric tails</li>
+        <li>Toggleable numeric tail mode (Windows-style vs. simple truncation)</li>
         <li>Create new blank floppy images</li>
         <li>Writes directly to the image file without needing to mount it as a drive</li>
-        <li>Automatically converts long filenames (e.g., `My_Favorite_Song.mid`) to the hardware-compliant 8.3 format (`MY_FAVOR.MID`).</li>
+        <li>Displays both long filenames and 8.3 short names</li>
         <li>Save copies of floppy images</li>
         <li>Drag and drop files to add them</li>
         <li>Delete files (press Del key)</li>
-        <li>Extract files</li>
+        <li>Extract files with original long names</li>
         <li>View boot sector and EBPB information</li>
         <li>View complete root directory information with timestamps</li>
         <li>Remembers last opened image and settings</li>
@@ -833,9 +878,6 @@ class FloppyManagerWindow(QMainWindow):
         """Handle window close event - save state"""
         # Save window geometry
         self.settings.setValue('window_geometry', self.saveGeometry())
-
-        # Last image path is already saved when loaded
-
         event.accept()
 
     def dragEnterEvent(self, event):
@@ -882,8 +924,7 @@ def main():
     # Set application style
     app.setStyle('Fusion')
 
-    # Create main window without requiring an image
-    # It will restore the last image automatically
+    # Create main window
     window = FloppyManagerWindow()
     window.show()
 
