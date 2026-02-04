@@ -89,14 +89,33 @@ class FAT12Image:
         # File System Type (Offset 54 to 62)
         # Should determine the FAT type by calculating the number of clusters, 
         # not by reading this string
-        self.fs_type = boot_sector[54:62].decode('ascii', errors='ignore').strip()
+        self.fs_type_from_EBPB = boot_sector[54:62].decode('ascii', errors='ignore').strip()
 
-        # Calculations
+        # Fixed Regions
         self.fat_start = self.reserved_sectors * self.bytes_per_sector
-        self.root_start = self.fat_start + (self.num_fats * self.sectors_per_fat * self.bytes_per_sector)
+        fat_region_size = self.num_fats * self.sectors_per_fat * self.bytes_per_sector
+        self.root_start = self.fat_start + fat_region_size
+
+        # The Root Directory is fixed in size only for FAT12/16
         self.root_size = (self.root_entries * 32)
+
+        # Data area always starts after the Root Directory area
         self.data_start = self.root_start + self.root_size
+
         self.bytes_per_cluster = self.bytes_per_sector * self.sectors_per_cluster
+
+        # Calculate number of clusters in the data area
+        non_data_sectors = self.data_start // self.bytes_per_sector
+        self.total_data_sectors = self.total_sectors - non_data_sectors
+        num_data_clusters = self.total_data_sectors // self.sectors_per_cluster
+
+        # Microsoft FAT Type thresholds
+        if num_data_clusters < 4085:
+            self.fat_type = 'FAT12'
+        elif num_data_clusters < 65525:
+            self.fat_type = 'FAT16'
+        else:
+            self.fat_type = 'FAT32'
         
     def read_fat(self) -> bytearray:
         """Read the FAT table"""
@@ -150,7 +169,7 @@ class FAT12Image:
             for i in range(self.root_entries):
                 entry_data = f.read(32)
                 
-                # Check if entry is free or end of directory
+                # Check if entry is end of directory or free (deleted)
                 if entry_data[0] == 0x00 or entry_data[0] == 0xE5:
                     continue
                 
@@ -164,25 +183,59 @@ class FAT12Image:
                 # Parse entry
                 name = entry_data[0:8].decode('ascii', errors='ignore').strip()
                 ext = entry_data[8:11].decode('ascii', errors='ignore').strip()
+
+                # Handle the 0x05 Shift-JIS lead byte
+                raw_name = list(entry_data[0:8])
+                if raw_name[0] == 0x05:
+                    raw_name[0] = 0xE5
+                name = bytes(raw_name).decode('ascii', errors='ignore').strip()
+                ext = entry_data[8:11].decode('ascii', errors='ignore').strip()
                 
                 if name and name[0] not in ('.', '\x00'):
                     full_name = f"{name}.{ext}" if ext else name
                     
-                    size = struct.unpack('<I', entry_data[28:32])[0]
-                    cluster = struct.unpack('<H', entry_data[26:28])[0]
+                    creation_time_tenth = entry_data[13], # Tenth of a second
+                    creation_time = struct.unpack('<H', entry_data[14:16])[0] # 2 second resolution
+                    creation_date = struct.unpack('<H', entry_data[16:18])[0]
+                    
+                    last_accessed_date = struct.unpack('<H', entry_data[18:20])[0]
                     
                     # Parse date/time
-                    date_val = struct.unpack('<H', entry_data[24:26])[0]
-                    time_val = struct.unpack('<H', entry_data[22:24])[0]
+                    # last modified date
+                    last_modified_time = struct.unpack('<H', entry_data[22:24])[0]
+                    last_modified_date = struct.unpack('<H', entry_data[24:26])[0]
+
+                    # Check your filesystem type (usually determined via the Boot Sector/BPB)
+                    if self.fat_type == 'FAT32':
+                        hi_cluster = struct.unpack('<H', entry_data[20:22])[0]
+                    else:
+                        hi_cluster = 0  # Ignore reserved bytes in FAT12/16
+
+                    lo_cluster = struct.unpack('<H', entry_data[26:28])[0]
+                    cluster = (hi_cluster << 16) | lo_cluster
+
+                    size = struct.unpack('<I', entry_data[28:32])[0]
+
+                    nt_case_info = entry_data[12] # NT Case Info (Offset 12)
                     
                     entries.append({
                         'name': full_name,
                         'size': size,
                         'cluster': cluster,
                         'index': i,
+                        'is_read_only': bool(attr & 0x01),
+                        'is_hidden': bool(attr & 0x02),
+                        'is_system': bool(attr & 0x04),
+                        'is_volume_id': bool(attr & 0x08),
                         'is_dir': bool(attr & 0x10),
-                        'date': date_val,
-                        'time': time_val
+                        'is_archive': bool(attr & 0x20),
+                        'nt_case_info': nt_case_info,
+                        'creation_time': creation_time,
+                        'creation_time_tenth': creation_time_tenth,
+                        'created_date': creation_date,
+                        'last_accessed_date': last_accessed_date,
+                        'last_modified_time': last_modified_time,
+                        'last_modified_date': last_modified_date,
                     })
         
         return entries
@@ -240,11 +293,11 @@ class FAT12Image:
             
             # Set date/time (current)
             now = datetime.datetime.now()
-            date_val = ((now.year - 1980) << 9) | (now.month << 5) | now.day
-            time_val = (now.hour << 11) | (now.minute << 5) | (now.second // 2)
+            last_modified_time = (now.hour << 11) | (now.minute << 5) | (now.second // 2)
+            last_modified_date = ((now.year - 1980) << 9) | (now.month << 5) | now.day
             
-            entry[22:24] = struct.pack('<H', time_val)
-            entry[24:26] = struct.pack('<H', date_val)
+            entry[22:24] = struct.pack('<H', last_modified_time)
+            entry[24:26] = struct.pack('<H', last_modified_date)
             entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster
             entry[28:32] = struct.pack('<I', len(data))  # File size
             
