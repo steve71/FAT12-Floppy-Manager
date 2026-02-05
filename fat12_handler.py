@@ -504,7 +504,7 @@ class FAT12Image:
         return bytes(data[:entry['size']])
     
     @staticmethod
-    def create_blank_image(filepath: str):
+    def create_empty_image(filepath: str):
         """Create a blank FAT12 floppy disk image (1.44 MB)"""
         bytes_per_sector = 512
         sectors_per_cluster = 1
