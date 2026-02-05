@@ -255,8 +255,8 @@ class FloppyManagerWindow(QMainWindow):
         # View menu
         view_menu = menubar.addMenu("&View")
 
-        boot_sector_action = QAction("&Boot Sector && EBPB Information...", self)
-        boot_sector_action.setToolTip("View complete boot sector and EBPB details")
+        boot_sector_action = QAction("&Boot Sector Information...", self)
+        boot_sector_action.setToolTip("View complete boot sector details")
         boot_sector_action.triggered.connect(self.show_boot_sector_info)
         view_menu.addAction(boot_sector_action)
 
@@ -528,7 +528,7 @@ class FloppyManagerWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to read directory: {e}")
 
     def show_boot_sector_info(self):
-        """Show boot sector and EBPB information"""
+        """Show boot sector information"""
         if not self.image:
             QMessageBox.information(
                 self, 
@@ -859,7 +859,7 @@ class FloppyManagerWindow(QMainWindow):
         <li>Drag and drop files to add them</li>
         <li>Delete files (press Del key)</li>
         <li>Extract files with original long names</li>
-        <li>View boot sector and EBPB information</li>
+        <li>View boot sector information</li>
         <li>View complete root directory information with timestamps</li>
         <li>Remembers last opened image and settings</li>
         </ul>

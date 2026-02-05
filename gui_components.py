@@ -8,7 +8,7 @@ from PyQt6.QtCore import Qt
 from fat12_handler import FAT12Image
 
 class BootSectorViewer(QDialog):
-    """Dialog to view boot sector and EBPB information"""
+    """Dialog to view boot sector information"""
     
     def __init__(self, image: FAT12Image, parent=None):
         super().__init__(parent)
@@ -17,7 +17,7 @@ class BootSectorViewer(QDialog):
         
     def setup_ui(self):
         """Setup the viewer UI"""
-        self.setWindowTitle("Boot Sector & EBPB Information")
+        self.setWindowTitle("Boot Sector Information")
         self.setGeometry(100, 100, 800, 600)
         
         layout = QVBoxLayout(self)
@@ -56,46 +56,18 @@ class BootSectorViewer(QDialog):
         
         bpb_table.resizeColumnsToContents()
         tabs.addTab(bpb_table, "BIOS Parameter Block")
-        
-        # EBPB Table
-        ebpb_table = QTableWidget()
-        ebpb_table.setColumnCount(2)
-        ebpb_table.setHorizontalHeaderLabels(['Field', 'Value'])
-        ebpb_table.horizontalHeader().setStretchLastSection(True)
-        ebpb_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        ebpb_table.setAlternatingRowColors(True)
-        
-        boot_sig_status = "Valid (0x29)" if self.image.boot_signature == 0x29 else f"Invalid/Old (0x{self.image.boot_signature:02X})"
-        
-        # EBPB data
-        ebpb_data = [
-            ('Drive Number', f'{self.image.drive_number} (0x{self.image.drive_number:02X})'),
-            ('Reserved/Current Head', str(self.image.reserved_ebpb)),
-            ('Boot Signature', boot_sig_status),
-            ('Volume ID (Serial Number)', f'0x{self.image.volume_id:08X}'),
-            ('Volume Label', self.image.volume_label if self.image.volume_label else '(none)'),
-            ('File System Type (from EBPB)', self.image.fs_type_from_EBPB if self.image.fs_type_from_EBPB else '(none)'),
-        ]
-        
-        ebpb_table.setRowCount(len(ebpb_data))
-        for i, (field, value) in enumerate(ebpb_data):
-            ebpb_table.setItem(i, 0, QTableWidgetItem(field))
-            ebpb_table.setItem(i, 1, QTableWidgetItem(value))
-        
-        ebpb_table.resizeColumnsToContents()
-        tabs.addTab(ebpb_table, "Extended BIOS Parameter Block")
-        
+                
         # Calculated Info Table
-        calc_table = QTableWidget()
-        calc_table.setColumnCount(2)
-        calc_table.setHorizontalHeaderLabels(['Field', 'Value'])
-        calc_table.horizontalHeader().setStretchLastSection(True)
-        calc_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        calc_table.setAlternatingRowColors(True)
+        vol_geom_table = QTableWidget()
+        vol_geom_table.setColumnCount(2)
+        vol_geom_table.setHorizontalHeaderLabels(['Field', 'Value'])
+        vol_geom_table.horizontalHeader().setStretchLastSection(True)
+        vol_geom_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        vol_geom_table.setAlternatingRowColors(True)
         
         total_bytes = self.image.total_sectors * self.image.bytes_per_sector
         
-        calc_data = [
+        vol_geom_data = [
             ('Detected File System Type', self.image.fat_type),
             ('FAT Start Offset', f'{self.image.fat_start:,} bytes'),
             ('Root Directory Start', f'{self.image.root_start:,} bytes'),
@@ -106,13 +78,13 @@ class BootSectorViewer(QDialog):
             ('Total Capacity', f'{total_bytes:,} bytes ({total_bytes / 1024 / 1024:.2f} MB)'),
         ]
         
-        calc_table.setRowCount(len(calc_data))
-        for i, (field, value) in enumerate(calc_data):
-            calc_table.setItem(i, 0, QTableWidgetItem(field))
-            calc_table.setItem(i, 1, QTableWidgetItem(value))
+        vol_geom_table.setRowCount(len(vol_geom_data))
+        for i, (field, value) in enumerate(vol_geom_data):
+            vol_geom_table.setItem(i, 0, QTableWidgetItem(field))
+            vol_geom_table.setItem(i, 1, QTableWidgetItem(value))
         
-        calc_table.resizeColumnsToContents()
-        tabs.addTab(calc_table, "Calculated Information")
+        vol_geom_table.resizeColumnsToContents()
+        tabs.addTab(vol_geom_table, "Volume Geometry")
         
         layout.addWidget(tabs)
         

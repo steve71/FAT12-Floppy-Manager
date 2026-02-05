@@ -69,7 +69,7 @@ dist\FAT12 Floppy Manager.exe
 - **Extract files** - Double-click or extract with "Extract Selected" button
 - **Sort columns** - Click any column header
 - **Disk space** - Real-time monitoring
-- **Boot Sector info** - View boot sector and EBPB information
+- **Boot Sector info** - View boot sector information
 - **Root Directory info** - View complete root directory information with timestamps
 
 ### Settings

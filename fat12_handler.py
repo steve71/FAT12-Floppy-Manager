@@ -67,14 +67,6 @@ class FAT12Image:
         else:
             self.total_sectors = struct.unpack('<I', boot_sector[32:36])[0]
 
-        # Extended BIOS Parameter Block (EBPB)
-        self.drive_number = boot_sector[36] 
-        self.reserved_ebpb = boot_sector[37]
-        self.boot_signature = boot_sector[38]
-        self.volume_id = struct.unpack('<I', boot_sector[39:43])[0]
-        self.volume_label = boot_sector[43:54].decode('ascii', errors='ignore').rstrip()
-        self.fs_type_from_EBPB = boot_sector[54:62].decode('ascii', errors='ignore').strip()
-
         # Fixed Regions
         self.fat_start = self.reserved_sectors * self.bytes_per_sector
         fat_region_size = self.num_fats * self.sectors_per_fat * self.bytes_per_sector
@@ -260,7 +252,6 @@ class FAT12Image:
                         'is_read_only': bool(attr & 0x01),
                         'is_hidden': bool(attr & 0x02),
                         'is_system': bool(attr & 0x04),
-                        'is_volume_id': bool(attr & 0x08),
                         'is_dir': bool(attr & 0x10),
                         'is_archive': bool(attr & 0x20),
                         'attributes': attr,
@@ -534,7 +525,7 @@ class FAT12Image:
             
             boot_sector = bytearray(512)
             boot_sector[0:3] = b'\xEB\x3C\x90'
-            boot_sector[3:11] = b'MSDOS5.0'
+            boot_sector[3:11] = b'YAMAHA  '  
             boot_sector[11:13] = bytes_per_sector.to_bytes(2, 'little')
             boot_sector[13] = sectors_per_cluster
             boot_sector[14:16] = reserved_sectors.to_bytes(2, 'little')
