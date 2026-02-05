@@ -63,7 +63,7 @@ python -m PyInstaller --clean --noconfirm ^
     --windowed ^
     --icon=floppy_icon.ico ^
     --add-data "fat12_handler.py;." ^
-    floppy_manager_pyqt.py
+    fat12_floppy_manager.py
 
 echo.
 REM Check if build succeeded
@@ -96,7 +96,7 @@ echo.
 echo   Please check error messages above.
 echo.
 echo   Common issues:
-echo   - Missing files (floppy_manager_pyqt.py, fat12_handler.py)
+echo   - Missing files (fat12_floppy_manager.py, fat12_handler.py)
 echo   - Antivirus blocking PyInstaller
 echo   - Insufficient disk space (need ~500 MB)
 echo.

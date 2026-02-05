@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['floppy_manager_pyqt.py'],
+    ['fat12_floppy_manager.py'],
     pathex=[],
     binaries=[],
     datas=[('fat12_handler.py', '.')],
