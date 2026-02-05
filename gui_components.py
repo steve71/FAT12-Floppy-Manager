@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, 
-    QTabWidget, QHeaderView, QPushButton
+    QTabWidget, QHeaderView, QPushButton, QLabel
 )
 from PyQt6.QtCore import Qt
 
