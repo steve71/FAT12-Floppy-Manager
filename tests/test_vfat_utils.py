@@ -34,3 +34,13 @@ def test_83_name_generation():
     assert "~1" in short_name
     short_name = generate_83_name(long_name, use_numeric_tail=False)
     assert short_name == "THISISALTXT"
+    # check spaces are removed
+    long_name = "This Is A Long File Name.txt"
+    short_name = generate_83_name(long_name, use_numeric_tail=True)
+    assert short_name == "THISIS~1TXT"
+    long_name = "MY_ONE.MI"
+    short_name = generate_83_name(long_name, use_numeric_tail=False)
+    # names are generated in a strict 8.3 format:
+    # always 11 bytes, filename with 8 bytes even if long file name is shorter
+    # dot removed and extension with 3 bytes even if extension is shorter
+    assert short_name == "MY_ONE  MI "
