@@ -31,6 +31,8 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+from vfat_utils import generate_83_name
+
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -595,7 +597,7 @@ class FloppyManagerWindow(QMainWindow):
                 existing_83_names = self.image.get_existing_83_names()
                 
                 # Generate the 8.3 name that will be used
-                short_name_83 = FAT12Image.generate_83_name(
+                short_name_83 = generate_83_name(
                     original_name, 
                     existing_83_names, 
                     self.use_numeric_tail
