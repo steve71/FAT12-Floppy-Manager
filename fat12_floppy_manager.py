@@ -45,7 +45,7 @@ from PyQt6.QtGui import QIcon, QAction, QKeySequence
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
-from gui_components import BootSectorViewer, RootDirectoryViewer
+from gui_components import BootSectorViewer, RootDirectoryViewer, FATViewer
 
 class FloppyManagerWindow(QMainWindow):
     """Main window for the floppy manager"""
@@ -245,6 +245,11 @@ class FloppyManagerWindow(QMainWindow):
         root_dir_action.triggered.connect(self.show_root_directory_info)
         view_menu.addAction(root_dir_action)
 
+        fat_viewer_action = QAction("&File Allocation Table...", self)
+        fat_viewer_action.setToolTip("View File Allocation Table as a grid")
+        fat_viewer_action.triggered.connect(self.show_fat_viewer)
+        view_menu.addAction(fat_viewer_action)
+
         # Settings menu
         settings_menu = menubar.addMenu("&Settings")
 
@@ -412,6 +417,19 @@ class FloppyManagerWindow(QMainWindow):
             return
         
         viewer = RootDirectoryViewer(self.image, self)
+        viewer.exec()
+
+    def show_fat_viewer(self):
+        """Show File Allocation Table viewer"""
+        if not self.image:
+            QMessageBox.information(
+                self, 
+                "No Image Loaded", 
+                "Please load or create a floppy image first."
+            )
+            return
+        
+        viewer = FATViewer(self.image, self)
         viewer.exec()
 
     def add_files(self):

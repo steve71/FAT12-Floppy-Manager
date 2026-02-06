@@ -1,8 +1,10 @@
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, 
-    QTabWidget, QHeaderView, QPushButton, QLabel
+    QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, 
+    QTabWidget, QHeaderView, QPushButton, QLabel, QGridLayout,
+    QWidget, QScrollArea, QSizePolicy, QSpinBox, QFrame, QApplication
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtGui import QColor
 import struct
 
 # Import the FAT12 handler
@@ -349,3 +351,330 @@ class RootDirectoryViewer(QDialog):
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn)
+
+
+class FATViewer(QDialog):
+    """Dialog to view File Allocation Table as a grid"""
+    
+    def __init__(self, image: FAT12Image, parent=None):
+        super().__init__(parent)
+        self.image = image
+        self.fat_data = None
+        self.total_clusters = 0
+        self.selected_chain = set()  # Track selected cluster chain
+        self.cluster_widgets = {}  # Map cluster number to widget
+        self.cluster_to_file = {}  # Map cluster number to filename
+        self.setup_ui()
+        
+    def build_cluster_to_file_mapping(self):
+        """Build a mapping from cluster numbers to filenames"""
+        self.cluster_to_file.clear()
+        
+        # Read directory entries
+        entries = self.image.read_root_directory()
+        
+        for entry in entries:
+            if entry['cluster'] >= 2:
+                # Follow the cluster chain for this file
+                current = entry['cluster']
+                visited = set()
+                while current < 0xFF8 and current not in visited:
+                    self.cluster_to_file[current] = entry['name']
+                    visited.add(current)
+                    next_cluster = self.image.get_fat_entry(self.fat_data, current)
+                    if next_cluster >= 2 and next_cluster < 0xFF8:
+                        current = next_cluster
+                    else:
+                        break
+        
+    def setup_ui(self):
+        """Setup the viewer UI"""
+        self.setWindowTitle("File Allocation Table Viewer")
+        self.setGeometry(100, 100, 1200, 700)
+        
+        layout = QVBoxLayout(self)
+        
+        # Read FAT data
+        self.fat_data = self.image.read_fat()
+        
+        # Calculate total number of clusters
+        # FAT12 has 12 bits per entry, so we can calculate max clusters
+        # based on FAT size
+        fat_size_bytes = len(self.fat_data)
+        self.total_clusters = min((fat_size_bytes * 8) // 12, 4084)
+        
+        # Build cluster to filename mapping
+        self.build_cluster_to_file_mapping()
+        
+        # Info label
+        info_text = (
+            f"<b>FAT Type:</b> {self.image.fat_type} | "
+            f"<b>FAT Size:</b> {fat_size_bytes:,} bytes ({self.image.sectors_per_fat} sectors) | "
+            f"<b>Total Clusters:</b> {self.total_clusters} | "
+            f"<b>Number of FATs:</b> {self.image.num_fats}"
+        )
+        info_label = QLabel(info_text)
+        info_label.setStyleSheet("QLabel { font-weight: bold; padding: 8px; background-color: #f0f0f0; }")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Legend
+        legend_frame = QFrame()
+        legend_frame.setFrameStyle(QFrame.Shape.StyledPanel)
+        legend_layout = QHBoxLayout(legend_frame)
+        legend_layout.addWidget(QLabel("<b>Legend:</b>"))
+        
+        # Create legend items
+        legend_items = [
+            ("Free (0x000)", QColor(240, 240, 240)),
+            ("Reserved (0x001)", QColor(200, 200, 255)),
+            ("Used (0x002-0xFF7)", QColor(144, 238, 144)),
+            ("Bad Cluster (0xFF7)", QColor(255, 200, 200)),
+            ("End of Chain (0xFF8-0xFFF)", QColor(255, 215, 0)),
+            ("Selected Chain", QColor(100, 149, 237))
+        ]
+        
+        for text, color in legend_items:
+            color_box = QLabel()
+            color_box.setFixedSize(20, 20)
+            color_box.setStyleSheet(f"background-color: {color.name()}; border: 1px solid #666;")
+            legend_layout.addWidget(color_box)
+            legend_layout.addWidget(QLabel(text))
+        
+        legend_layout.addStretch()
+        layout.addWidget(legend_frame)
+        
+        # Controls
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Clusters per row:"))
+        
+        self.clusters_per_row_spinbox = QSpinBox()
+        self.clusters_per_row_spinbox.setRange(8, 64)
+        self.clusters_per_row_spinbox.setValue(32)
+        self.clusters_per_row_spinbox.setSingleStep(8)
+        self.clusters_per_row_spinbox.valueChanged.connect(self.on_clusters_per_row_changed)
+        controls_layout.addWidget(self.clusters_per_row_spinbox)
+        
+        # Clear selection button next to spinbox
+        clear_btn = QPushButton("Clear Selection")
+        clear_btn.clicked.connect(self.clear_selection)
+        controls_layout.addWidget(clear_btn)
+        
+        # Status label for showing "Rebuilding grid..."
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("QLabel { color: #666; font-style: italic; }")
+        controls_layout.addWidget(self.status_label)
+        
+        controls_layout.addStretch()
+        
+        layout.addLayout(controls_layout)
+        
+        # Create scroll area for the grid
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # Container widget for grid
+        self.grid_container = QWidget()
+        self.scroll.setWidget(self.grid_container)
+        
+        layout.addWidget(self.scroll)
+        
+        # Build initial grid
+        self.rebuild_grid()
+        
+        # Close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+    
+    def on_clusters_per_row_changed(self):
+        """Handle clusters per row change with status indication"""
+        self.status_label.setText("⏳ Rebuilding grid...")
+        self.status_label.repaint()  # Force immediate update
+        QApplication.processEvents()  # Process UI events
+        
+        self.rebuild_grid()
+        
+        self.status_label.setText("✓ Grid updated")
+        QApplication.processEvents()
+        
+        # Clear status after 1 second
+        QTimer.singleShot(1000, lambda: self.status_label.setText(""))
+    
+    def clear_selection(self):
+        """Clear the selected cluster chain"""
+        self.selected_chain.clear()
+        self.update_cluster_colors()
+    
+    def cluster_clicked(self, cluster_num):
+        """Handle cluster click - select entire chain (or deselect if already selected)"""
+        # Build the chain starting from this cluster
+        chain = set()
+        
+        # Follow forward from this cluster
+        current = cluster_num
+        visited = set()
+        while current < 0xFF8 and current not in visited:
+            chain.add(current)
+            visited.add(current)
+            next_cluster = self.image.get_fat_entry(self.fat_data, current)
+            if next_cluster >= 2 and next_cluster < 0xFF8:
+                current = next_cluster
+            else:
+                break
+        
+        # Find all clusters that point to this one (backwards)
+        for c in range(2, self.total_clusters):
+            if c not in chain:
+                next_c = self.image.get_fat_entry(self.fat_data, c)
+                if next_c in chain:
+                    # This cluster points into our chain, follow it backwards
+                    temp = c
+                    temp_visited = set()
+                    while temp >= 2 and temp < 0xFF8 and temp not in temp_visited:
+                        chain.add(temp)
+                        temp_visited.add(temp)
+                        # Find what points to temp
+                        found = False
+                        for check in range(2, self.total_clusters):
+                            if self.image.get_fat_entry(self.fat_data, check) == temp:
+                                temp = check
+                                found = True
+                                break
+                        if not found:
+                            break
+        
+        # Toggle: if this chain is already selected, deselect it
+        if chain == self.selected_chain:
+            self.selected_chain.clear()
+        else:
+            self.selected_chain = chain
+        
+        self.update_cluster_colors()
+    
+    def update_cluster_colors(self):
+        """Update colors of all cluster widgets based on selection"""
+        for cluster_num, cell in self.cluster_widgets.items():
+            value = self.image.get_fat_entry(self.fat_data, cluster_num)
+            
+            # Determine if this cluster is in the selected chain
+            is_selected = cluster_num in self.selected_chain
+            
+            # Get base color
+            if is_selected:
+                color = QColor(100, 149, 237)  # Cornflower blue for selection
+            elif value == 0x000:
+                color = QColor(240, 240, 240)
+            elif value == 0x001:
+                color = QColor(200, 200, 255)
+            elif value == 0xFF7:
+                color = QColor(255, 200, 200)
+            elif value >= 0xFF8:
+                color = QColor(255, 215, 0)
+            else:
+                color = QColor(144, 238, 144)
+            
+            cell.setStyleSheet(
+                f"background-color: {color.name()}; "
+                f"border: 1px solid #666; "
+                f"font-size: 10px; "
+                f"font-weight: bold;"
+            )
+    
+    def rebuild_grid(self):
+        """Rebuild the FAT grid with current settings"""
+        clusters_per_row = self.clusters_per_row_spinbox.value()
+        
+        # Clear old layout
+        old_layout = self.grid_container.layout()
+        if old_layout:
+            while old_layout.count():
+                item = old_layout.takeAt(0)
+                if item.widget():
+                    item.widget().deleteLater()
+            QWidget().setLayout(old_layout)  # Delete old layout
+        
+        # Clear widget tracking
+        self.cluster_widgets.clear()
+        
+        # Create new grid layout
+        grid_layout = QGridLayout(self.grid_container)
+        grid_layout.setSpacing(2)
+        
+        # Add column headers (cluster numbers)
+        for col in range(clusters_per_row):
+            header_label = QLabel(f"<b>{col}</b>")
+            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header_label.setStyleSheet("font-size: 9px;")
+            grid_layout.addWidget(header_label, 0, col + 1)
+        
+        # Add rows
+        num_rows = (self.total_clusters + clusters_per_row - 1) // clusters_per_row
+        
+        for row in range(num_rows):
+            # Add row header
+            row_start = row * clusters_per_row
+            header_label = QLabel(f"<b>{row_start}</b>")
+            header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header_label.setStyleSheet("font-size: 9px;")
+            grid_layout.addWidget(header_label, row + 1, 0)
+            
+            # Add cluster cells
+            for col in range(clusters_per_row):
+                cluster_num = row * clusters_per_row + col
+                
+                if cluster_num >= self.total_clusters:
+                    break
+                
+                # Get FAT entry value
+                value = self.image.get_fat_entry(self.fat_data, cluster_num)
+                
+                # Create cell widget
+                cell = QLabel()
+                cell.setFixedSize(30, 30)  # Smaller size
+                cell.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                cell.setFrameStyle(QFrame.Shape.Box)
+                
+                # Make clickable
+                cell.mousePressEvent = lambda event, c=cluster_num: self.cluster_clicked(c)
+                cell.setCursor(Qt.CursorShape.PointingHandCursor)
+                
+                # Determine text based on value
+                if value == 0x000:
+                    text = ""  # Empty for free clusters
+                    tooltip = f"Cluster {cluster_num}: Free (0x000)"
+                elif value == 0x001:
+                    text = "RES"
+                    tooltip = f"Cluster {cluster_num}: Reserved (0x001)"
+                elif value == 0xFF7:
+                    text = "BAD"
+                    tooltip = f"Cluster {cluster_num}: Bad Cluster (0xFF7)"
+                elif value >= 0xFF8:
+                    text = "EOF"
+                    tooltip = f"Cluster {cluster_num}: End of Chain (0x{value:03X})"
+                else:
+                    # Used cluster - points to next cluster
+                    text = f"{value}"
+                    tooltip = f"Cluster {cluster_num}: Points to cluster {value} (0x{value:03X})"
+                
+                # Add filename to tooltip if this cluster belongs to a file
+                if cluster_num in self.cluster_to_file:
+                    tooltip += f"\nFile: {self.cluster_to_file[cluster_num]}"
+                
+                cell.setText(text)
+                cell.setToolTip(tooltip)
+                
+                # Store reference
+                self.cluster_widgets[cluster_num] = cell
+                
+                grid_layout.addWidget(cell, row + 1, col + 1)
+        
+        # Update colors (in case there's a selection)
+        self.update_cluster_colors()
+        
+        # Add spacer to push everything to top-left
+        grid_layout.setRowStretch(num_rows + 1, 1)
+        grid_layout.setColumnStretch(clusters_per_row + 1, 1)
+
