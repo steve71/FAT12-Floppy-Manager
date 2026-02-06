@@ -159,14 +159,6 @@ class FloppyManagerWindow(QMainWindow):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Size
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Type
 
-        # Track clicks for inline rename
-        self.last_clicked_item = None
-        self.last_click_time = 0
-        self.currently_editing = False
-        self.original_name_before_edit = None
-        self.table.itemClicked.connect(self.handle_item_clicked)
-        self.table.itemChanged.connect(self.handle_item_changed)
-
         # Double-click to extract
         self.table.doubleClicked.connect(self.extract_selected)
 
@@ -198,12 +190,7 @@ class FloppyManagerWindow(QMainWindow):
         extract_action = QAction("Extract", self)
         extract_action.triggered.connect(self.extract_selected)
         menu.addAction(extract_action)
-        
-        if len(selected_rows) == 1:
-            rename_action = QAction("Rename (F2)", self)
-            rename_action.triggered.connect(self.rename_selected)
-            menu.addAction(rename_action)
-        
+                
         menu.addSeparator()
         
         delete_action = QAction("Delete", self)
@@ -244,15 +231,6 @@ class FloppyManagerWindow(QMainWindow):
         exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-
-        # Edit menu
-        edit_menu = menubar.addMenu("&Edit")
-
-        rename_action = QAction("&Rename File...", self)
-        rename_action.setShortcut(QKeySequence("F2"))
-        rename_action.setToolTip("Rename the selected file")
-        rename_action.triggered.connect(self.rename_selected)
-        edit_menu.addAction(rename_action)
 
         # View menu
         view_menu = menubar.addMenu("&View")
@@ -325,8 +303,6 @@ class FloppyManagerWindow(QMainWindow):
         """Handle keyboard events in the table"""
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
             self.delete_selected()
-        elif event.key() == Qt.Key.Key_F2:
-            self.rename_selected()
         elif event.key() == Qt.Key.Key_Escape:
             # Cancel editing if in progress
             if self.currently_editing and self.original_name_before_edit:
@@ -341,123 +317,6 @@ class FloppyManagerWindow(QMainWindow):
         else:
             # Call the original keyPressEvent
             QTableWidget.keyPressEvent(self.table, event)
-
-    def handle_item_clicked(self, item):
-        """Handle item click for inline rename (Windows-style)"""
-        import time
-        
-        # Only handle clicks on the filename column
-        if item.column() != 0:
-            return
-        
-        # Check if this is a second click on the same item (not a double-click)
-        current_time = time.time()
-        time_since_last_click = current_time - self.last_click_time
-        
-        # Time window: more than 0.3s (to avoid double-click) but less than 1.5s
-        if (self.last_clicked_item == item and 
-            0.3 < time_since_last_click < 1.5 and
-            self.image and
-            not self.currently_editing):
-            
-            # Store original name before editing
-            self.original_name_before_edit = item.text()
-            self.currently_editing = True
-            
-            # Enable editing for this item
-            self.table.setEditTriggers(QTableWidget.EditTrigger.SelectedClicked)
-            self.table.editItem(item)
-            
-        self.last_clicked_item = item
-        self.last_click_time = current_time
-
-    def handle_item_changed(self, item):
-        """Handle inline rename when user finishes editing"""
-        # Only handle changes to filename column when we're actually editing
-        if item.column() != 0 or not self.currently_editing:
-            return
-        
-        # Mark that we're no longer editing
-        self.currently_editing = False
-        
-        # Disable editing again
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        
-        if not self.image:
-            return
-        
-        new_name = item.text().strip()
-        
-        # Get the entry index from the hidden column
-        row = item.row()
-        index_item = self.table.item(row, 4)
-        
-        # Check if index item exists
-        if not index_item:
-            return
-            
-        entry_index = int(index_item.text())
-        
-        entries = self.image.read_root_directory()
-        entry = next((e for e in entries if e['index'] == entry_index), None)
-        
-        if not entry:
-            return
-        
-        # Check if name actually changed
-        if new_name.upper() == entry['name'].upper():
-            self.original_name_before_edit = None
-            return
-        
-        # Validate name
-        if not new_name:
-            QMessageBox.warning(self, "Invalid Name", "Filename cannot be empty.")
-            # Restore original name
-            if self.original_name_before_edit:
-                item.setText(self.original_name_before_edit)
-            self.original_name_before_edit = None
-            return
-        
-        # Check for duplicates
-        existing_names = [e['name'].upper() for e in entries if e['index'] != entry_index]
-        if new_name.upper() in existing_names:
-            QMessageBox.warning(
-                self,
-                "Name Conflict",
-                f"A file named '{new_name}' already exists."
-            )
-            # Restore original name
-            if self.original_name_before_edit:
-                item.setText(self.original_name_before_edit)
-            self.original_name_before_edit = None
-            return
-        
-        # Perform rename
-        try:
-            if self.image.rename_file(entry, new_name, self.use_numeric_tail):
-                self.original_name_before_edit = None
-                self.refresh_file_list()
-                self.status_bar.showMessage(f"Renamed '{entry['name']}' to '{new_name}'")
-                
-                # Show information about the new short name
-                entries = self.image.read_root_directory()
-                renamed_entry = next((e for e in entries if e['name'].upper() == new_name.upper()), None)
-                if renamed_entry:
-                    self.status_bar.showMessage(
-                        f"Renamed to: {new_name} (8.3: {renamed_entry['short_name']})"
-                    )
-            else:
-                QMessageBox.critical(self, "Error", "Failed to rename file")
-                # Restore original name
-                if self.original_name_before_edit:
-                    item.setText(self.original_name_before_edit)
-                self.original_name_before_edit = None
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to rename file: {e}")
-            # Restore original name
-            if self.original_name_before_edit:
-                item.setText(self.original_name_before_edit)
-            self.original_name_before_edit = None
 
     def load_image(self, filepath: str):
         """Load a floppy disk image"""
@@ -740,30 +599,6 @@ class FloppyManagerWindow(QMainWindow):
         if success_count > 0:
             self.status_bar.showMessage(f"Deleted {success_count} file(s)")
 
-    def rename_selected(self):
-        """Start inline editing for the selected file"""
-        if not self.image:
-            QMessageBox.information(self, "No Image Loaded", "No image loaded.")
-            return
-
-        selected_rows = set(item.row() for item in self.table.selectedItems())
-
-        if not selected_rows:
-            QMessageBox.information(self, "Info", "Please select a file to rename")
-            return
-
-        if len(selected_rows) > 1:
-            QMessageBox.information(self, "Info", "Please select only one file to rename")
-            return
-
-        row = list(selected_rows)[0]
-        filename_item = self.table.item(row, 0)
-        
-        if filename_item:
-            # Enable editing and start editing the filename
-            self.table.setEditTriggers(QTableWidget.EditTrigger.SelectedClicked)
-            self.table.editItem(filename_item)
-
     def create_new_image(self):
         """Create a new blank floppy disk image"""
         filename, _ = QFileDialog.getSaveFileName(
@@ -853,7 +688,6 @@ class FloppyManagerWindow(QMainWindow):
         <li>FAT12 filesystem support with VFAT long filenames</li>
         <li>Windows-compatible 8.3 name generation with numeric tails</li>
         <li>Toggleable numeric tail mode (Windows-style vs. simple truncation)</li>
-        <li>Rename files with automatic 8.3 short name generation</li>
         <li>Create new blank floppy images</li>
         <li>Writes directly to the image file without needing to mount it as a drive</li>
         <li>Displays both long filenames and 8.3 short names</li>
@@ -871,7 +705,6 @@ class FloppyManagerWindow(QMainWindow):
         <li>Ctrl+N - Create new image</li>
         <li>Ctrl+O - Open image</li>
         <li>Ctrl+Shift+S - Save image as</li>
-        <li>F2 or click twice on filename - Rename file inline</li>
         <li>Del/Backspace - Delete selected files</li>
         <li>Double-click - Extract file</li>
         </ul>
