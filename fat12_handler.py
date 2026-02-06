@@ -273,6 +273,18 @@ class FAT12Image:
         
         return entries
     
+    def read_raw_directory_entries(self):
+        """Read all raw directory entries from disk"""
+        raw_entries = []
+        with open(self.image_path, 'rb') as f:
+            f.seek(self.root_start)
+            for i in range(self.root_entries):
+                entry_data = f.read(32)
+                raw_entries.append((i, entry_data))
+                if entry_data[0] == 0x00:  # End of directory
+                    break
+        return raw_entries
+    
     def find_free_clusters(self, count: int = None) -> List[int]:
         """Find free clusters in the FAT. If count is None, find all."""
         fat_data = self.read_fat()

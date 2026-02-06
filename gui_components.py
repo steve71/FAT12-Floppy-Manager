@@ -103,18 +103,6 @@ class RootDirectoryViewer(QDialog):
         self.image = image
         self.raw_entries = []  # Store raw directory entry data
         self.setup_ui()
-        
-    def read_raw_directory_entries(self):
-        """Read all raw directory entries from disk"""
-        raw_entries = []
-        with open(self.image.image_path, 'rb') as f:
-            f.seek(self.image.root_start)
-            for i in range(self.image.root_entries):
-                entry_data = f.read(32)
-                raw_entries.append((i, entry_data))
-                if entry_data[0] == 0x00:  # End of directory
-                    break
-        return raw_entries
     
     def format_raw_entry_tooltip(self, index: int) -> str:
         """Format a detailed tooltip showing the raw directory entry structure
@@ -269,7 +257,7 @@ class RootDirectoryViewer(QDialog):
         layout = QVBoxLayout(self)
         
         # Read raw entries
-        self.raw_entries = self.read_raw_directory_entries()
+        self.raw_entries = self.image.read_raw_directory_entries()
         
         # Info label
         entries = self.image.read_root_directory()
