@@ -99,6 +99,8 @@ dist\FAT12 Floppy Manager.exe
 **Essential Files:**
 - `fat12_floppy_manager.py` - Main application (PyQt6)
 - `fat12_handler.py` - FAT12 filesystem handler
+- `gui_components.py` - GUI dialogs and viewers
+- `vfat_utils.py` - VFAT/LFN utilities
 - `floppy_icon.ico` - Application icon
 - `BUILD.bat` - Build script
 
