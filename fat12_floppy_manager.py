@@ -407,6 +407,7 @@ class FloppyManagerWindow(QMainWindow):
             "• Confirmation dialogs (enabled)\n"
             "• Numeric tail mode (disabled)\n"
             "• Theme (Light)\n"
+            "• Clusters per row (32)\n"
             "• Window size and position\n\n"
             "The application will need to restart for all changes to take effect.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -439,6 +440,7 @@ class FloppyManagerWindow(QMainWindow):
         self.settings.setValue('confirm_replace', True)
         self.settings.setValue('use_numeric_tail', False)
         self.settings.setValue('theme_mode', 'light')
+        self.settings.setValue('clusters_per_row', 32)
         
         QMessageBox.information(
             self,

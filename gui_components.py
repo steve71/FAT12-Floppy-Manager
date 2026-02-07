@@ -21,7 +21,6 @@ class BootSectorViewer(QDialog):
     def setup_ui(self):
         """Setup the viewer UI"""
         self.setWindowTitle("Boot Sector Information")
-        self.setGeometry(100, 100, 800, 600)
         
         layout = QVBoxLayout(self)
         
@@ -91,11 +90,18 @@ class BootSectorViewer(QDialog):
         
         layout.addWidget(tabs)
         
-        # Close button
+        # Close button in a horizontal layout (right-aligned)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
         close_btn = QPushButton("Close")
+        close_btn.setFixedWidth(100)
         close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
-
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+        
+        # Auto-resize to fit content
+        self.adjustSize()
+        self.setMinimumSize(350, 470)
 
 class RootDirectoryViewer(QDialog):
     """Dialog to view complete root directory information with detailed VFAT tooltips"""
@@ -254,7 +260,6 @@ class RootDirectoryViewer(QDialog):
     def setup_ui(self):
         """Setup the viewer UI"""
         self.setWindowTitle("Root Directory Information")
-        self.setGeometry(100, 100, 1200, 600)
         
         layout = QVBoxLayout(self)
         
@@ -347,10 +352,18 @@ class RootDirectoryViewer(QDialog):
         
         layout.addWidget(table)
         
-        # Close button
+        # Close button in a horizontal layout (right-aligned)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
         close_btn = QPushButton("Close")
+        close_btn.setFixedWidth(100)
         close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
+        
+        # Auto-resize to fit content
+        self.adjustSize()
+        self.setMinimumSize(1240, 500)
 
 
 class FATViewer(QDialog):
@@ -364,6 +377,11 @@ class FATViewer(QDialog):
         self.selected_chain = set()  # Track selected cluster chain
         self.cluster_widgets = {}  # Map cluster number to widget
         self.cluster_to_file = {}  # Map cluster number to filename
+        
+        # Load settings
+        from PyQt6.QtCore import QSettings
+        self.settings = QSettings('FAT12FloppyManager', 'Settings')
+        
         self.setup_ui()
         
     def build_cluster_to_file_mapping(self):
@@ -432,7 +450,9 @@ class FATViewer(QDialog):
         
         self.clusters_per_row_spinbox = QSpinBox()
         self.clusters_per_row_spinbox.setRange(8, 64)
-        self.clusters_per_row_spinbox.setValue(32)
+        # Load saved value or default to 32
+        saved_clusters_per_row = self.settings.value('clusters_per_row', 32, type=int)
+        self.clusters_per_row_spinbox.setValue(saved_clusters_per_row)
         self.clusters_per_row_spinbox.setSingleStep(8)
         self.clusters_per_row_spinbox.valueChanged.connect(self.on_clusters_per_row_changed)
         controls_layout.addWidget(self.clusters_per_row_spinbox)
@@ -466,13 +486,20 @@ class FATViewer(QDialog):
         # Build initial grid
         self.rebuild_grid()
         
-        # Close button
+        # Close button in a horizontal layout (right-aligned)
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
         close_btn = QPushButton("Close")
+        close_btn.setFixedWidth(100)
         close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
+        button_layout.addWidget(close_btn)
+        layout.addLayout(button_layout)
     
     def on_clusters_per_row_changed(self):
         """Handle clusters per row change with status indication"""
+        # Save to settings
+        self.settings.setValue('clusters_per_row', self.clusters_per_row_spinbox.value())
+        
         self.status_label.setText("⏳ Rebuilding grid...")
         self.status_label.repaint()  # Force immediate update
         QApplication.processEvents()  # Process UI events
