@@ -165,6 +165,8 @@ Turn off confirmations for faster workflow:
 - Other Yamaha or other vintage keyboards using FAT12 floppies
 - Any FAT12 1.44 MB floppy images
 
+---
+
 ## Development & Testing
 
 The project includes a comprehensive suite of unit tests ensuring reliability for file operations and filesystem integrity.
