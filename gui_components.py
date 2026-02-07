@@ -508,6 +508,7 @@ class FATViewer(QDialog):
         
         for cluster_num, cell in self.cluster_widgets.items():
             value = self.image.get_fat_entry(self.fat_data, cluster_num)
+            status = self.image.classify_cluster(value)
             
             # Determine if this cluster is in the selected chain
             is_selected = cluster_num in self.selected_chain
@@ -520,28 +521,28 @@ class FATViewer(QDialog):
                 else:
                     color = QColor(100, 149, 237)  # Cornflower blue for light mode
                     text_color = "white"
-            elif value == 0x000:
+            elif status == FAT12Image.CLUSTER_FREE:
                 if is_dark:
                     color = QColor(45, 45, 45)  # Dark gray for dark mode
                     text_color = "#888"
                 else:
                     color = QColor(240, 240, 240)  # Light gray for light mode
                     text_color = "#666"
-            elif value == 0x001:
+            elif status == FAT12Image.CLUSTER_RESERVED:
                 if is_dark:
                     color = QColor(60, 60, 120)  # Darker blue for dark mode
                     text_color = "white"
                 else:
                     color = QColor(200, 200, 255)  # Light blue for light mode
                     text_color = "black"
-            elif value == 0xFF7:
+            elif status == FAT12Image.CLUSTER_BAD:
                 if is_dark:
                     color = QColor(120, 60, 60)  # Darker red for dark mode
                     text_color = "white"
                 else:
                     color = QColor(255, 200, 200)  # Light red for light mode
                     text_color = "black"
-            elif value >= 0xFF8:
+            elif status == FAT12Image.CLUSTER_EOF:
                 if is_dark:
                     color = QColor(180, 140, 0)  # Darker gold for dark mode
                     text_color = "white"
@@ -549,6 +550,7 @@ class FATViewer(QDialog):
                     color = QColor(255, 215, 0)  # Gold for light mode
                     text_color = "black"
             else:
+                # CLUSTER_USED
                 if is_dark:
                     color = QColor(60, 120, 60)  # Darker green for dark mode
                     text_color = "white"
@@ -614,6 +616,7 @@ class FATViewer(QDialog):
                 
                 # Get FAT entry value
                 value = self.image.get_fat_entry(self.fat_data, cluster_num)
+                status = self.image.classify_cluster(value)
                 
                 # Create cell widget
                 cell = QLabel()
@@ -626,16 +629,16 @@ class FATViewer(QDialog):
                 cell.setCursor(Qt.CursorShape.PointingHandCursor)
                 
                 # Determine text based on value
-                if value == 0x000:
+                if status == FAT12Image.CLUSTER_FREE:
                     text = ""  # Empty for free clusters
                     tooltip = f"Cluster {cluster_num}: Free (0x000)"
-                elif value == 0x001:
+                elif status == FAT12Image.CLUSTER_RESERVED:
                     text = "RES"
                     tooltip = f"Cluster {cluster_num}: Reserved (0x001)"
-                elif value == 0xFF7:
+                elif status == FAT12Image.CLUSTER_BAD:
                     text = "BAD"
                     tooltip = f"Cluster {cluster_num}: Bad Cluster (0xFF7)"
-                elif value >= 0xFF8:
+                elif status == FAT12Image.CLUSTER_EOF:
                     text = "EOF"
                     tooltip = f"Cluster {cluster_num}: End of Chain (0x{value:03X})"
                 else:

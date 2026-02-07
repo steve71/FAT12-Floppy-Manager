@@ -37,6 +37,13 @@ from vfat_utils import (decode_fat_time, decode_fat_date,
 class FAT12Image:
     """Handler for FAT12 floppy disk images"""
     
+    # Cluster status constants
+    CLUSTER_FREE = 'FREE'
+    CLUSTER_RESERVED = 'RESERVED'
+    CLUSTER_BAD = 'BAD'
+    CLUSTER_EOF = 'EOF'
+    CLUSTER_USED = 'USED'
+
     def __init__(self, image_path: str):
         self.image_path = image_path
         self.load_boot_sector()
@@ -101,6 +108,24 @@ class FAT12Image:
     def get_free_space(self) -> int:
         """Get free space in bytes"""
         return len(self.find_free_clusters()) * self.bytes_per_cluster
+
+    def classify_cluster(self, value: int) -> str:
+        """Classify a FAT12 cluster value"""
+        if value == 0x000:
+            return self.CLUSTER_FREE
+        elif value == 0x001:
+            return self.CLUSTER_RESERVED
+        elif value == 0xFF7:
+            return self.CLUSTER_BAD
+        elif value >= 0xFF8:
+            return self.CLUSTER_EOF
+        else:
+            return self.CLUSTER_USED
+
+    def predict_short_name(self, long_name: str, use_numeric_tail: bool = False) -> str:
+        """Predict the 8.3 short name that will be generated for a file"""
+        existing_names = self.get_existing_83_names()
+        return generate_83_name(long_name, existing_names, use_numeric_tail)
 
     def find_entry_by_83_name(self, target_83_name: str) -> Optional[dict]:
         """Find a directory entry by its 11-character 8.3 name (no dot)"""

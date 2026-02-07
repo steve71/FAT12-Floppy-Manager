@@ -784,3 +784,24 @@ class TestHelperMethods:
         # 12 bits per entry = 1.5 bytes
         # 4608 / 1.5 = 3072 entries
         assert handler.get_fat_entry_count() == 3072
+
+    def test_classify_cluster(self, handler):
+        assert handler.classify_cluster(0x000) == FAT12Image.CLUSTER_FREE
+        assert handler.classify_cluster(0x001) == FAT12Image.CLUSTER_RESERVED
+        assert handler.classify_cluster(0x002) == FAT12Image.CLUSTER_USED
+        assert handler.classify_cluster(0xFEF) == FAT12Image.CLUSTER_USED
+        assert handler.classify_cluster(0xFF7) == FAT12Image.CLUSTER_BAD
+        assert handler.classify_cluster(0xFF8) == FAT12Image.CLUSTER_EOF
+        assert handler.classify_cluster(0xFFF) == FAT12Image.CLUSTER_EOF
+
+    def test_predict_short_name(self, tmp_path):
+        img_path = tmp_path / "test_predict.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Write a file to occupy a name
+        handler.write_file_to_image("FILE.TXT", b"")
+        
+        # Predict collision
+        assert handler.predict_short_name("File.txt", use_numeric_tail=True) == "FILE~1  TXT"
+        assert handler.predict_short_name("NewFile.txt") == "NEWFILE TXT"

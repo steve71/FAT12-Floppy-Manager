@@ -31,7 +31,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from vfat_utils import generate_83_name, format_83_name
+from vfat_utils import format_83_name
 
 
 from PyQt6.QtWidgets import (
@@ -612,15 +612,8 @@ class FloppyManagerWindow(QMainWindow):
                 path_obj = Path(filepath)
                 original_name = path_obj.name
 
-                # Get existing 8.3 names
-                existing_83_names = self.image.get_existing_83_names()
-                
-                # Generate the 8.3 name that will be used
-                short_name_83 = generate_83_name(
-                    original_name, 
-                    existing_83_names, 
-                    self.use_numeric_tail
-                )
+                # Predict the 8.3 name that will be used
+                short_name_83 = self.image.predict_short_name(original_name, self.use_numeric_tail)
                 
                 # Format 8.3 name for display (add dot back)
                 short_display = format_83_name(short_name_83)
