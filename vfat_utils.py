@@ -365,3 +365,39 @@ def decode_short_name(entry_data: bytes) -> Tuple[str, str]:
     name = bytes(raw_name).decode('ascii', errors='ignore').strip()
     ext = entry_data[8:11].decode('ascii', errors='ignore').strip()
     return name, ext
+
+
+def format_83_name(raw_name_11: str) -> str:
+    """Format an 11-character raw 8.3 name (e.g. 'FILE    TXT') to display format ('FILE.TXT')"""
+    if len(raw_name_11) < 11:
+        return raw_name_11.strip()
+        
+    name = raw_name_11[:8].strip()
+    ext = raw_name_11[8:11].strip()
+    
+    if ext:
+        return f"{name}.{ext}"
+    return name
+
+
+def get_raw_entry_chain(raw_entries: List[Tuple[int, bytes]], target_index: int) -> List[Tuple[int, bytes]]:
+    """
+    Given a list of raw directory entries and the index of a short entry,
+    return the list of related entries (LFN entries + the short entry)
+    in order (LFNs first, then short).
+    """
+    if target_index < 0 or target_index >= len(raw_entries):
+        return []
+        
+    chain = [raw_entries[target_index]]
+    
+    # Walk backwards to find LFN entries
+    for i in range(target_index - 1, -1, -1):
+        idx, data = raw_entries[i]
+        attr = data[11]
+        if attr == 0x0F:
+            chain.insert(0, (idx, data))
+        else:
+            break
+            
+    return chain

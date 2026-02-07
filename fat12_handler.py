@@ -33,7 +33,7 @@ from vfat_utils import (decode_fat_time, decode_fat_date,
                         encode_fat_time, encode_fat_date, 
                         generate_83_name, calculate_lfn_checksum, 
                         create_lfn_entries, decode_lfn_text,
-                        decode_short_name)
+                        decode_short_name, format_83_name)
 class FAT12Image:
     """Handler for FAT12 floppy disk images"""
     
@@ -92,6 +92,11 @@ class FAT12Image:
     def get_total_capacity(self) -> int:
         """Get total disk capacity in bytes"""
         return self.total_sectors * self.bytes_per_sector
+
+    def get_fat_entry_count(self) -> int:
+        """Calculate total number of entries in the FAT"""
+        fat_size_bytes = self.sectors_per_fat * self.bytes_per_sector
+        return (fat_size_bytes * 8) // 12
 
     def get_free_space(self) -> int:
         """Get free space in bytes"""
@@ -425,8 +430,7 @@ class FAT12Image:
         
         # Determine if we need LFN entries
         # Reconstruct what the short name looks like with a dot
-        short_with_dot = short_name_83[:8].strip() + '.' + short_name_83[8:11].strip()
-        short_with_dot = short_with_dot.rstrip('.')
+        short_with_dot = format_83_name(short_name_83)
         
         # Need LFN if original name is different from short name (preserve case)
         needs_lfn = filename != short_with_dot

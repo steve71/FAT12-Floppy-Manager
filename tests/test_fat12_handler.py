@@ -772,3 +772,15 @@ class TestHelperMethods:
         assert "A       TXT" in names
         assert "LONGFI~1TXT" in names
         assert len(names) == 2
+
+    def test_get_fat_entry_count(self, tmp_path):
+        img_path = tmp_path / "test_fat_count.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Sectors per FAT = 9
+        # Bytes per sector = 512
+        # Total bytes = 4608
+        # 12 bits per entry = 1.5 bytes
+        # 4608 / 1.5 = 3072 entries
+        assert handler.get_fat_entry_count() == 3072

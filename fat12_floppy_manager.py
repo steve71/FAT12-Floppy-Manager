@@ -31,7 +31,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from vfat_utils import generate_83_name
+from vfat_utils import generate_83_name, format_83_name
 
 
 from PyQt6.QtWidgets import (
@@ -623,8 +623,7 @@ class FloppyManagerWindow(QMainWindow):
                 )
                 
                 # Format 8.3 name for display (add dot back)
-                short_display = short_name_83[:8].strip() + '.' + short_name_83[8:11].strip()
-                short_display = short_display.rstrip('.')
+                short_display = format_83_name(short_name_83)
 
                 # Check if file already exists
                 collision_entry = self.image.find_entry_by_83_name(short_name_83)

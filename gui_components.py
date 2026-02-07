@@ -8,7 +8,7 @@ from PyQt6.QtGui import QColor, QPalette
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
-from vfat_utils import parse_raw_lfn_entry, parse_raw_short_entry
+from vfat_utils import parse_raw_lfn_entry, parse_raw_short_entry, get_raw_entry_chain
 
 class BootSectorViewer(QDialog):
     """Dialog to view boot sector information"""
@@ -118,30 +118,11 @@ class RootDirectoryViewer(QDialog):
         This shows the complete 32-byte layout of the directory entry including
         all LFN entries that precede the short entry.
         """
-        # Find all entries related to this file (LFN + short entry)
-        related_entries = []
-        
         # Sanity check - make sure index is within bounds
         if index >= len(self.raw_entries):
             return "<html><body>Invalid entry index</body></html>"
         
-        # Get the short entry first
-        short_entry_data = self.raw_entries[index][1]
-        related_entries.append((index, short_entry_data))
-        
-        # Walk backwards to find LFN entries
-        i = index - 1
-        while i >= 0:
-            entry_data = self.raw_entries[i][1]
-            attr = entry_data[11]
-            
-            # Check if LFN entry
-            if attr == 0x0F:
-                related_entries.insert(0, (i, entry_data))
-                i -= 1
-            else:
-                # Not an LFN entry, stop searching
-                break
+        related_entries = get_raw_entry_chain(self.raw_entries, index)
         
         # Build HTML tooltip with transposed (horizontal) tables
         html = "<html><head><style>"
@@ -351,8 +332,7 @@ class FATViewer(QDialog):
         # Calculate total number of clusters
         # FAT12 has 12 bits per entry, so we can calculate max clusters
         # based on FAT size
-        fat_size_bytes = len(self.fat_data)
-        self.total_clusters = min((fat_size_bytes * 8) // 12, 4084)
+        self.total_clusters = min(self.image.get_fat_entry_count(), 4084)
         
         # Build cluster to filename mapping
         self.cluster_to_file = self.image.get_cluster_map()
@@ -360,7 +340,7 @@ class FATViewer(QDialog):
         # Info label
         info_text = (
             f"<b>FAT Type:</b> {self.image.fat_type} | "
-            f"<b>FAT Size:</b> {fat_size_bytes:,} bytes ({self.image.sectors_per_fat} sectors) | "
+            f"<b>FAT Size:</b> {len(self.fat_data):,} bytes ({self.image.sectors_per_fat} sectors) | "
             f"<b>Total Clusters:</b> {self.total_clusters} | "
             f"<b>Number of FATs:</b> {self.image.num_fats}"
         )

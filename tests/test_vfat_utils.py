@@ -7,7 +7,8 @@ from vfat_utils import (
     generate_83_name, is_valid_83_char,
     calculate_lfn_checksum, create_lfn_entries,
     parse_raw_lfn_entry, parse_raw_short_entry,
-    decode_lfn_text, decode_short_name
+    decode_lfn_text, decode_short_name,
+    format_83_name, get_raw_entry_chain
 )
 
 class TestTimeDate:
@@ -285,3 +286,57 @@ class TestNameDecoding:
         # "ILENAME"
         name, ext = decode_short_name(entry)
         assert name == "ILENAME"
+
+class TestFormatting:
+    def test_format_83_name(self):
+        assert format_83_name("FILE    TXT") == "FILE.TXT"
+        assert format_83_name("NOEXT      ") == "NOEXT"
+        assert format_83_name("A       B  ") == "A.B"
+        assert format_83_name("SHORT") == "SHORT" # Less than 11 chars
+        assert format_83_name("") == ""
+
+class TestEntryChains:
+    def test_get_raw_entry_chain(self):
+        # Mock entries
+        # 0: LFN 1
+        # 1: LFN 2
+        # 2: Short Entry (Target)
+        # 3: Unrelated
+        
+        raw_entries = []
+        
+        # Entry 0: LFN
+        e0 = bytearray(32)
+        e0[11] = 0x0F
+        raw_entries.append((0, bytes(e0)))
+        
+        # Entry 1: LFN
+        e1 = bytearray(32)
+        e1[11] = 0x0F
+        raw_entries.append((1, bytes(e1)))
+        
+        # Entry 2: Short
+        e2 = bytearray(32)
+        e2[11] = 0x20
+        raw_entries.append((2, bytes(e2)))
+        
+        # Entry 3: Short
+        e3 = bytearray(32)
+        e3[11] = 0x20
+        raw_entries.append((3, bytes(e3)))
+        
+        # Test finding chain for index 2
+        chain = get_raw_entry_chain(raw_entries, 2)
+        assert len(chain) == 3
+        assert chain[0][0] == 0
+        assert chain[1][0] == 1
+        assert chain[2][0] == 2
+        
+        # Test finding chain for index 3 (no LFNs before it, just itself)
+        chain = get_raw_entry_chain(raw_entries, 3)
+        assert len(chain) == 1
+        assert chain[0][0] == 3
+        
+        # Test invalid index
+        assert get_raw_entry_chain(raw_entries, 99) == []
+        assert get_raw_entry_chain(raw_entries, -1) == []
