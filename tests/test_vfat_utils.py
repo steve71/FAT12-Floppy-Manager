@@ -128,6 +128,19 @@ class Test83NameGeneration:
         name = generate_83_name("File.txt", existing, use_numeric_tail=True)
         # Base name shrinks from 5 to 4 chars
         assert name == "FILE~100TXT"
+    
+    def test_generate_83_name_large_tail_1000(self):
+        # Test transition to ~1000 (3 chars base)
+        # We simulate existing names up to ~999
+        existing = ["FILE    TXT"]
+        for i in range(1, 1000):
+            # Ensure correct padding for existing names
+            base = f"FILE~{i}".ljust(8)
+            existing.append(f"{base}TXT")
+        
+        name = generate_83_name("File.txt", existing, use_numeric_tail=True)
+        # Base name shrinks from 4 to 3 chars: FIL~1000.TXT -> FIL~1000TXT
+        assert name == "FIL~1000TXT"
 
     def test_generate_83_name_with_invalid_chars(self):
         # These characters are invalid and should be stripped
@@ -271,6 +284,25 @@ class TestNameDecoding:
         
         text = decode_lfn_text(entry)
         assert text == "ABC"
+        
+    def test_decode_lfn_text_exception(self):
+        # Pass truncated data to cause odd-length bytearray which fails utf-16le decode
+        data = b'\x00\x41' # 2 bytes. entry_data[1:11] slice will be 1 byte.
+        assert decode_lfn_text(data) is None
+
+    def test_parse_raw_lfn_entry_exception(self):
+        # Similar to above, force exception in decoding inside parse_raw_lfn_entry
+        # We use invalid UTF-16LE data (lone high surrogate) to trigger exception
+        data = bytearray(32)
+        data[0] = 0x41
+        data[11] = 0x0F
+        # Put lone high surrogate at end of chars1 (indices 9-10 of entry_data)
+        data[9] = 0x00
+        data[10] = 0xD8
+        
+        info = parse_raw_lfn_entry(data)
+        # Should return '???' for text fields on exception
+        assert info['text1'] == '???'
 
     def test_decode_raw_83_name(self):
         # Standard name

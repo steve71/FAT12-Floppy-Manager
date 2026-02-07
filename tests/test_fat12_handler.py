@@ -1,6 +1,7 @@
 import pytest
 import datetime
 import struct
+from unittest.mock import patch, mock_open
 from fat12_handler import FAT12Image
 from vfat_utils import decode_fat_date, decode_fat_time, calculate_lfn_checksum
 
@@ -66,6 +67,43 @@ class TestInitialization:
         assert fat_data[0] == 0xF0
         assert fat_data[1] == 0xFF
         assert fat_data[2] == 0xFF
+
+    def test_fat_type_detection(self, tmp_path):
+        # Test FAT16 detection
+        img_path_16 = tmp_path / "test_fat16.img"
+        # Create a minimal boot sector with enough sectors to be FAT16 (> 4085 clusters)
+        with open(img_path_16, 'wb') as f:
+            f.write(b'\x00' * 512)
+            f.seek(0)
+            # Write BPB
+            f.seek(11); f.write(struct.pack('<H', 512)) # Bytes per sector
+            f.seek(13); f.write(b'\x01')                # Sectors per cluster
+            f.seek(14); f.write(struct.pack('<H', 1))  # Reserved sectors
+            f.seek(16); f.write(b'\x02')                # Num FATs
+            f.seek(17); f.write(struct.pack('<H', 224)) # Root entries
+            f.seek(19); f.write(struct.pack('<H', 5000)) # Total sectors (small) -> ~5000 clusters
+            f.seek(22); f.write(struct.pack('<H', 9))   # Sectors per FAT
+            
+        handler = FAT12Image(str(img_path_16))
+        assert handler.fat_type == 'FAT16'
+
+        # Test FAT32 detection
+        img_path_32 = tmp_path / "test_fat32.img"
+        with open(img_path_32, 'wb') as f:
+            f.write(b'\x00' * 512)
+            f.seek(0)
+            # BPB
+            f.seek(11); f.write(struct.pack('<H', 512))
+            f.seek(13); f.write(b'\x01')
+            f.seek(14); f.write(struct.pack('<H', 1))
+            f.seek(16); f.write(b'\x02')
+            f.seek(17); f.write(struct.pack('<H', 224))
+            f.seek(19); f.write(struct.pack('<H', 0))   # Total sectors (small) = 0
+            f.seek(32); f.write(struct.pack('<I', 70000)) # Total sectors (large) -> ~70000 clusters
+            f.seek(22); f.write(struct.pack('<H', 9))
+            
+        handler = FAT12Image(str(img_path_32))
+        assert handler.fat_type == 'FAT32'
 
 class TestClusterManagement:
     def test_find_free_clusters(self, tmp_path):
@@ -379,6 +417,34 @@ class TestDirectoryOperations:
         # Short name should be uppercase
         assert entries[0]['short_name'] == "MIXCASE.TXT"
 
+    def test_rename_file_unicode_error(self, tmp_path):
+        img_path = tmp_path / "test_rename_uni.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        handler.write_file_to_image("old.txt", b"")
+        entries = handler.read_root_directory()
+        
+        # Mock generate_83_name to return a non-ascii string to trigger UnicodeEncodeError
+        with patch('fat12_handler.generate_83_name', return_value="FÏLE    TXT"):
+            handler.rename_file(entries[0], "new.txt")
+            
+        entries = handler.read_root_directory()
+        # 'Ï' is dropped by 'ignore', resulting in "FLE    TXT " (padded)
+        assert "FLE" in entries[0]['short_name']
+
+    def test_rename_file_exception(self, tmp_path):
+        img_path = tmp_path / "test_rename_exc.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        handler.write_file_to_image("file.txt", b"")
+        entries = handler.read_root_directory()
+        
+        # Mock open to raise exception during rename
+        with patch('builtins.open', side_effect=IOError("Mock error")):
+            result = handler.rename_file(entries[0], "new.txt")
+            assert result is False
+
     def test_lfn_cleanup_on_delete(self, tmp_path):
         img_path = tmp_path / "test_lfn_del.img"
         FAT12Image.create_empty_image(str(img_path))
@@ -403,6 +469,17 @@ class TestDirectoryOperations:
                 byte = f.read(1)
                 assert byte == b'\xE5'
                 f.seek(31, 1) # Skip rest of entry
+
+    def test_delete_file_exception(self, tmp_path):
+        img_path = tmp_path / "test_delete_exc.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        handler.write_file_to_image("file.txt", b"")
+        entries = handler.read_root_directory()
+        
+        with patch('builtins.open', side_effect=IOError("Mock error")):
+            result = handler.delete_file(entries[0])
+            assert result is False
 
     def test_lfn_checksum_mismatch(self, tmp_path):
         img_path = tmp_path / "test_checksum.img"
@@ -461,6 +538,50 @@ class TestDirectoryOperations:
         assert len(entries) == 1
         # Should not pick up the garbage LFN because checksum mismatch
         assert entries[0]['name'] == "OTHER.TXT"
+
+    def test_read_root_directory_fat32(self, tmp_path):
+        # Test reading high cluster bits when FAT32 is detected
+        img_path = tmp_path / "test_fat32_read.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Force FAT32 type
+        handler.fat_type = 'FAT32'
+        
+        # Create a directory entry with high cluster bits
+        # Offset 20-21 is high cluster (0x1234), 26-27 is low cluster (0x5678)
+        # Total cluster = 0x12345678
+        entry = bytearray(32)
+        entry[0:11] = b"FAT32   TXT"
+        entry[20:22] = struct.pack('<H', 0x1234) # High
+        entry[26:28] = struct.pack('<H', 0x5678) # Low
+        
+        # Write to root dir
+        with open(str(img_path), 'r+b') as f:
+            f.seek(handler.root_start)
+            f.write(entry)
+            
+        entries = handler.read_root_directory()
+        assert len(entries) == 1
+        assert entries[0]['cluster'] == 0x12345678
+
+    def test_rename_case_change_no_tail(self, tmp_path):
+        # Verify that renaming a file to change case doesn't generate a numeric tail
+        img_path = tmp_path / "test_rename_case.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        handler.write_file_to_image("FILE.TXT", b"content")
+        entries = handler.read_root_directory()
+        assert entries[0]['short_name'] == "FILE.TXT"
+        
+        # Rename "FILE.TXT" to "File.txt"
+        # Should result in "FILE.TXT" short name (no ~1) and "File.txt" long name
+        handler.rename_file(entries[0], "File.txt")
+        
+        entries = handler.read_root_directory()
+        assert entries[0]['name'] == "File.txt"
+        assert entries[0]['short_name'] == "FILE.TXT" # Should NOT be FILE~1.TXT
 
     def test_shift_jis_e5_handling(self, tmp_path):
         img_path = tmp_path / "test_sjis.img"
