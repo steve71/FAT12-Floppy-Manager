@@ -451,6 +451,144 @@ class FAT12Image:
         
         return True
     
+    def find_free_root_entries(self, required_slots: int) -> int:
+        """
+        Find a contiguous block of free root directory entries.
+        Returns the starting index, or -1 if no space is found.
+        """
+        with open(self.image_path, 'rb') as f:
+            f.seek(self.root_start)
+            consecutive = 0
+            start_index = -1
+
+            for i in range(self.root_entries):
+                data = f.read(32)
+                # Check for End of Dir (0x00) or Deleted (0xE5)
+                if data[0] == 0x00 or data[0] == 0xE5:
+                    if consecutive == 0:
+                        start_index = i
+                    consecutive += 1
+
+                    if consecutive >= required_slots:
+                        return start_index
+                else:
+                    # Reset counter if we hit an occupied slot
+                    consecutive = 0
+                    start_index = -1
+
+        return -1
+
+    def rename_file(self, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
+        """
+        Rename a file, updating 8.3 name, LFN entries, and handling directory slot reallocation.
+        """
+        try:
+            #
+            # Prepare New Names
+            #
+            # Get existing names (excluding current file) to avoid collisions
+            existing_names = self.get_existing_83_names()
+
+            with open(self.image_path, 'rb') as f:
+                f.seek(self.root_start + (entry['index'] * 32))
+                current_raw = f.read(11)
+                current_name_11 = current_raw.decode('ascii', errors='ignore')
+
+            if current_name_11 in existing_names:
+                existing_names.remove(current_name_11)
+
+            # Generate and format new 8.3 name (11 bytes raw)
+            short_name_11 = generate_83_name(new_name, existing_names, use_numeric_tail)
+            raw_short_name = short_name_11.encode('ascii')[:11]
+
+            # Generate LFN entries if needed
+            base = short_name_11[:8].strip()
+            ext = short_name_11[8:].strip()
+            simple_name = f"{base}.{ext}" if ext else base
+
+            needs_lfn = (new_name != simple_name) or (len(new_name) > 12)
+            new_lfn_entries = []
+            if needs_lfn:
+                new_lfn_entries = create_lfn_entries(new_name, raw_short_name)
+
+            total_new_slots = len(new_lfn_entries) + 1
+
+            #
+            # Analyze Current Location
+            #
+            # Find all current slots used by this file (Short + LFNs)
+            old_lfn_indices = []
+            idx = entry['index'] - 1
+            with open(self.image_path, 'rb') as f:
+                while idx >= 0:
+                    f.seek(self.root_start + (idx * 32))
+                    data = f.read(32)
+                    if data[11] == 0x0F: # Attribute 0x0F is LFN
+                        old_lfn_indices.append(idx)
+                        idx -= 1
+                    else:
+                        break
+
+            current_start_index = old_lfn_indices[-1] if old_lfn_indices else entry['index']
+            total_old_slots = len(old_lfn_indices) + 1
+
+            # Read original metadata (Cluster, Size, Dates) to preserve it
+            with open(self.image_path, 'rb') as f:
+                f.seek(self.root_start + (entry['index'] * 32))
+                original_entry_data = bytearray(f.read(32))
+            #
+            # Determine Write Location
+            #
+            write_start_index = -1
+            slots_to_delete = []
+
+            if total_new_slots <= total_old_slots:
+                # CASE A: Fits in current location
+                write_start_index = current_start_index
+                # Delete only the extra slots we no longer need
+                slots_to_delete = range(current_start_index + total_new_slots, current_start_index + total_old_slots)
+            else:
+                # CASE B: Needs more space -> Find new contiguous block
+                write_start_index = self.find_free_root_entries(total_new_slots)
+
+                if write_start_index == -1:
+                    print("Error: Disk full (root directory entries exhausted)")
+                    return False
+
+                # We are moving, so delete ALL old slots
+                slots_to_delete = range(current_start_index, current_start_index + total_old_slots)
+
+            #
+            # Execute Write
+            #
+            with open(self.image_path, 'r+b') as f:
+                # Mark old/unused slots as deleted (0xE5)
+                for i in slots_to_delete:
+                    f.seek(self.root_start + (i * 32))
+                    f.write(b'\xE5')
+
+                # Write New LFN Entries
+                for i, lfn_data in enumerate(new_lfn_entries):
+                    f.seek(self.root_start + ((write_start_index + i) * 32))
+                    f.write(lfn_data)
+
+                # Write New Short Entry
+                new_short_entry = original_entry_data
+                new_short_entry[0:11] = raw_short_name # Update 8.3 name
+
+                short_entry_idx = write_start_index + len(new_lfn_entries)
+                f.seek(self.root_start + (short_entry_idx * 32))
+                f.write(new_short_entry)
+
+            return True
+
+        except Exception as e:
+            print(f"Rename Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    
     def delete_file(self, entry: dict) -> bool:
         """Delete a file from the image (including LFN entries)"""
         try:
