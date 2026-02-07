@@ -311,6 +311,13 @@ class FloppyManagerWindow(QMainWindow):
         else:
             self.theme_light_action.setChecked(True)
 
+        settings_menu.addSeparator()
+
+        reset_settings_action = QAction("Reset Settings to Default...", self)
+        reset_settings_action.setToolTip("Reset all settings to their default values")
+        reset_settings_action.triggered.connect(self.reset_settings)
+        settings_menu.addAction(reset_settings_action)
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
 
@@ -389,6 +396,58 @@ class FloppyManagerWindow(QMainWindow):
             palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
             palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
             app.setPalette(palette)
+
+    def reset_settings(self):
+        """Reset all settings to their default values"""
+        response = QMessageBox.question(
+            self,
+            "Reset Settings",
+            "Reset all settings to their default values?\n\n"
+            "This will reset:\n"
+            "• Confirmation dialogs (enabled)\n"
+            "• Numeric tail mode (disabled)\n"
+            "• Theme (Light)\n"
+            "• Window size and position\n\n"
+            "The application will need to restart for all changes to take effect.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if response == QMessageBox.StandardButton.No:
+            return
+        
+        # Clear all settings
+        self.settings.clear()
+        
+        # Set defaults
+        self.confirm_delete = True
+        self.confirm_replace = True
+        self.use_numeric_tail = False
+        self.theme_mode = 'light'
+        
+        # Update UI to reflect defaults
+        self.confirm_delete_action.setChecked(True)
+        self.confirm_replace_action.setChecked(True)
+        self.use_numeric_tail_action.setChecked(False)
+        self.theme_light_action.setChecked(True)
+        
+        # Apply light theme
+        self.apply_theme('light')
+        
+        # Save the default settings
+        self.settings.setValue('confirm_delete', True)
+        self.settings.setValue('confirm_replace', True)
+        self.settings.setValue('use_numeric_tail', False)
+        self.settings.setValue('theme_mode', 'light')
+        
+        QMessageBox.information(
+            self,
+            "Settings Reset",
+            "Settings have been reset to default values.\n\n"
+            "Note: Window size and position will be reset when you restart the application."
+        )
+        
+        self.status_bar.showMessage("Settings reset to defaults")
 
     def table_key_press(self, event):
         """Handle keyboard events in the table"""
