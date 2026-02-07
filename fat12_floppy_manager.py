@@ -60,15 +60,12 @@ class FloppyManagerWindow(QMainWindow):
         self.use_numeric_tail = self.settings.value('use_numeric_tail', False, type=bool)
         self.theme_mode = self.settings.value('theme_mode', 'light', type=str)
 
-        # Restore window geometry if available
-        geometry = self.settings.value('window_geometry')
-        if geometry:
-            self.restoreGeometry(geometry)
+        self.setup_ui()
+
+        self.restore_settings()
 
         self.image_path = image_path
         self.image = None
-
-        self.setup_ui()
         
         # Apply theme after UI is set up
         self.apply_theme(self.theme_mode)
@@ -84,6 +81,17 @@ class FloppyManagerWindow(QMainWindow):
             else:
                 # No image loaded, show empty state
                 self.status_bar.showMessage("No image loaded. Create new or open existing image.")
+
+    def restore_settings(self):
+        # Restore window geometry if available
+        geometry = self.settings.value('window_geometry')
+        if geometry:
+            self.restoreGeometry(geometry)
+
+        # Restore window state if available
+        state = self.settings.value('window_state')
+        if state:
+            self.restoreState(state)
 
     def setup_ui(self):
         """Create the user interface"""
@@ -917,8 +925,10 @@ class FloppyManagerWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Handle window close event - save state"""
-        # Save window geometry
+        # Save window geometry and State
         self.settings.setValue('window_geometry', self.saveGeometry())
+        self.settings.setValue('window_state', self.saveState())
+
         event.accept()
 
     def dragEnterEvent(self, event):
