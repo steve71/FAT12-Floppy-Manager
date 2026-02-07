@@ -325,6 +325,71 @@ class FAT12Image:
         
         return names
     
+    def get_cluster_map(self) -> dict:
+        """
+        Return a dictionary mapping cluster numbers to filenames.
+        Used to visualize which file occupies which clusters.
+        """
+        mapping = {}
+        fat_data = self.read_fat()
+        entries = self.read_root_directory()
+        
+        for entry in entries:
+            cluster = entry['cluster']
+            if cluster < 2:
+                continue
+                
+            # Follow chain
+            curr = cluster
+            visited = set()
+            while curr >= 2 and curr < 0xFF8:
+                if curr in visited:
+                    break
+                visited.add(curr)
+                mapping[curr] = entry['name']
+                curr = self.get_fat_entry(fat_data, curr)
+                
+        return mapping
+
+    def get_cluster_chain(self, cluster: int) -> List[int]:
+        """
+        Get the full chain of clusters containing the specified cluster.
+        Traverses backwards to find the start, then forwards to the end.
+        """
+        fat_data = self.read_fat()
+        # Calculate max cluster based on data area size
+        max_cluster = (self.total_data_sectors // self.sectors_per_cluster) + 2
+        
+        # 1. Find the start of the chain
+        # Scan FAT for any entry pointing to 'current' until we find the head
+        current = cluster
+        while True:
+            parent = None
+            for c in range(2, max_cluster):
+                if self.get_fat_entry(fat_data, c) == current:
+                    parent = c
+                    break
+            
+            if parent is not None:
+                current = parent
+            else:
+                # No parent found, 'current' is the start
+                break
+                
+        # 2. Traverse forward from start
+        chain = []
+        curr = current
+        visited = set()
+        
+        while curr >= 2 and curr < 0xFF8:
+            if curr in visited: # Cycle detection
+                break
+            visited.add(curr)
+            chain.append(curr)
+            curr = self.get_fat_entry(fat_data, curr)
+            
+        return chain
+
     def write_file_to_image(self, filename: str, data: bytes, use_numeric_tail: bool = False) -> bool:
         """Write a file to the disk image with VFAT long filename support
         

@@ -592,3 +592,88 @@ class TestDirectoryOperations:
         file4 = next(e for e in entries_new if e['name'] == "FILE4.TXT")
         
         assert file4['index'] == file2['index']
+
+class TestClusterAnalysis:
+    def test_get_cluster_map(self, tmp_path):
+        img_path = tmp_path / "test_map.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Write a file that takes 2 clusters (512 bytes per cluster)
+        # 600 bytes -> 2 clusters
+        handler.write_file_to_image("file1.txt", b"A" * 600)
+        
+        # Write another file (1 cluster)
+        handler.write_file_to_image("file2.txt", b"B" * 100)
+        
+        # Get map
+        cluster_map = handler.get_cluster_map()
+        
+        # file1 should be at cluster 2 and 3 (since it's the first file)
+        # file2 should be at cluster 4
+        
+        assert cluster_map.get(2) == "file1.txt"
+        assert cluster_map.get(3) == "file1.txt"
+        assert cluster_map.get(4) == "file2.txt"
+        
+        # Check size
+        assert len(cluster_map) == 3
+
+    def test_get_cluster_chain(self, tmp_path):
+        img_path = tmp_path / "test_chain.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Write a file that takes 3 clusters
+        # 1200 bytes -> 3 clusters (512 * 2 = 1024, need 3rd)
+        handler.write_file_to_image("chain.txt", b"C" * 1200)
+        
+        # Clusters should be 2, 3, 4
+        
+        # Test getting chain from start
+        chain = handler.get_cluster_chain(2)
+        assert chain == [2, 3, 4]
+        
+        # Test getting chain from middle
+        chain = handler.get_cluster_chain(3)
+        assert chain == [2, 3, 4]
+        
+        # Test getting chain from end
+        chain = handler.get_cluster_chain(4)
+        assert chain == [2, 3, 4]
+        
+        # Test single cluster file
+        handler.write_file_to_image("single.txt", b"S" * 100)
+        # Should be cluster 5
+        chain = handler.get_cluster_chain(5)
+        assert chain == [5]
+
+    def test_get_cluster_chain_fragmented(self, tmp_path):
+        img_path = tmp_path / "test_frag_chain.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Create fragmentation
+        # Write file A (1 cluster) -> 2
+        handler.write_file_to_image("A.txt", b"A" * 100)
+        # Write file B (1 cluster) -> 3
+        handler.write_file_to_image("B.txt", b"B" * 100)
+        # Write file C (1 cluster) -> 4
+        handler.write_file_to_image("C.txt", b"C" * 100)
+        
+        # Delete B -> Cluster 3 is free
+        entries = handler.read_root_directory()
+        entry_b = next(e for e in entries if e['name'] == "B.txt")
+        handler.delete_file(entry_b)
+        
+        # Write file D (2 clusters) -> Should take 3, then 5
+        handler.write_file_to_image("D.txt", b"D" * 600)
+        
+        # Verify D's chain
+        # It should use cluster 3 (reclaimed) and cluster 5 (next free)
+        
+        chain = handler.get_cluster_chain(3)
+        assert chain == [3, 5]
+        
+        chain = handler.get_cluster_chain(5)
+        assert chain == [3, 5]

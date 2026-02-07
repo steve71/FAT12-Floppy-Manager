@@ -384,27 +384,6 @@ class FATViewer(QDialog):
         
         self.setup_ui()
         
-    def build_cluster_to_file_mapping(self):
-        """Build a mapping from cluster numbers to filenames"""
-        self.cluster_to_file.clear()
-        
-        # Read directory entries
-        entries = self.image.read_root_directory()
-        
-        for entry in entries:
-            if entry['cluster'] >= 2:
-                # Follow the cluster chain for this file
-                current = entry['cluster']
-                visited = set()
-                while current < 0xFF8 and current not in visited:
-                    self.cluster_to_file[current] = entry['name']
-                    visited.add(current)
-                    next_cluster = self.image.get_fat_entry(self.fat_data, current)
-                    if next_cluster >= 2 and next_cluster < 0xFF8:
-                        current = next_cluster
-                    else:
-                        break
-        
     def setup_ui(self):
         """Setup the viewer UI"""
         self.setWindowTitle("File Allocation Table Viewer")
@@ -422,7 +401,7 @@ class FATViewer(QDialog):
         self.total_clusters = min((fat_size_bytes * 8) // 12, 4084)
         
         # Build cluster to filename mapping
-        self.build_cluster_to_file_mapping()
+        self.cluster_to_file = self.image.get_cluster_map()
         
         # Info label
         info_text = (
@@ -519,41 +498,9 @@ class FATViewer(QDialog):
     
     def cluster_clicked(self, cluster_num):
         """Handle cluster click - select entire chain (or deselect if already selected)"""
-        # Build the chain starting from this cluster
-        chain = set()
-        
-        # Follow forward from this cluster
-        current = cluster_num
-        visited = set()
-        while current < 0xFF8 and current not in visited:
-            chain.add(current)
-            visited.add(current)
-            next_cluster = self.image.get_fat_entry(self.fat_data, current)
-            if next_cluster >= 2 and next_cluster < 0xFF8:
-                current = next_cluster
-            else:
-                break
-        
-        # Find all clusters that point to this one (backwards)
-        for c in range(2, self.total_clusters):
-            if c not in chain:
-                next_c = self.image.get_fat_entry(self.fat_data, c)
-                if next_c in chain:
-                    # This cluster points into our chain, follow it backwards
-                    temp = c
-                    temp_visited = set()
-                    while temp >= 2 and temp < 0xFF8 and temp not in temp_visited:
-                        chain.add(temp)
-                        temp_visited.add(temp)
-                        # Find what points to temp
-                        found = False
-                        for check in range(2, self.total_clusters):
-                            if self.image.get_fat_entry(self.fat_data, check) == temp:
-                                temp = check
-                                found = True
-                                break
-                        if not found:
-                            break
+        # Get the full chain from the backend
+        chain_list = self.image.get_cluster_chain(cluster_num)
+        chain = set(chain_list)
         
         # Toggle: if this chain is already selected, deselect it
         if chain == self.selected_chain:
@@ -780,4 +727,3 @@ class FATViewer(QDialog):
         # Add spacer to push everything to top-left
         grid_layout.setRowStretch(num_rows + 1, 1)
         grid_layout.setColumnStretch(clusters_per_row + 1, 1)
-
