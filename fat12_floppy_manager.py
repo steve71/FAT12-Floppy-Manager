@@ -28,6 +28,7 @@ A modern GUI tool for managing files on FAT12 floppy disk images with VFAT LFN s
 import sys
 import os
 import shutil
+import zipfile
 from pathlib import Path
 from typing import Optional
 
@@ -38,9 +39,9 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QMessageBox, QLabel, QStatusBar, QMenuBar, QMenu, QHeaderView,
-    QDialog, QTabWidget
+    QDialog, QTabWidget, QToolBar, QStyle, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QSettings, QTimer
+from PyQt6.QtCore import Qt, QSettings, QTimer, QSize
 from PyQt6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor
 
 # Import the FAT12 handler
@@ -137,9 +138,14 @@ class FloppyManagerWindow(QMainWindow):
         icon_path = Path(__file__).parent / 'floppy_icon.ico'
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
+        else:
+            self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DriveFDIcon))
 
         # Create menu bar
         self.create_menus()
+
+        # Create toolbar
+        self.create_toolbar()
 
         # Central widget
         central_widget = QWidget()
@@ -147,39 +153,6 @@ class FloppyManagerWindow(QMainWindow):
 
         # Main layout
         layout = QVBoxLayout(central_widget)
-
-        # Top toolbar
-        toolbar = QHBoxLayout()
-
-        # Buttons
-        self.add_btn = QPushButton("📁 Add Files")
-        self.add_btn.setToolTip("Add files to the floppy image")
-        self.add_btn.clicked.connect(self.add_files)
-
-        self.extract_btn = QPushButton("💾 Extract Selected")
-        self.extract_btn.setToolTip("Extract selected files to your computer")
-        self.extract_btn.clicked.connect(self.extract_selected)
-
-        self.delete_btn = QPushButton("🗑️ Delete Selected")
-        self.delete_btn.setToolTip("Delete selected files (or press Delete key)")
-        self.delete_btn.clicked.connect(self.delete_selected)
-
-        self.refresh_btn = QPushButton("🔄 Refresh")
-        self.refresh_btn.setToolTip("Reload the file list")
-        self.refresh_btn.clicked.connect(self.refresh_file_list)
-
-        toolbar.addWidget(self.add_btn)
-        toolbar.addWidget(self.extract_btn)
-        toolbar.addWidget(self.delete_btn)
-        toolbar.addWidget(self.refresh_btn)
-        toolbar.addStretch()
-
-        # Info label
-        self.info_label = QLabel()
-        self.info_label.setStyleSheet("QLabel { color: #555; font-weight: bold; }")
-        toolbar.addWidget(self.info_label)
-
-        layout.addLayout(toolbar)
 
         # File table - now with 5 columns
         self.table = QTableWidget()
@@ -228,10 +201,135 @@ class FloppyManagerWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+        
+        # Info Label (Permanent widget on the right side of status bar)
+        self.info_label = QLabel()
+        self.status_bar.addPermanentWidget(self.info_label)
+        
         self.status_bar.showMessage("Ready | Tip: Drag and drop files to add them to the floppy")
 
         # Keyboard shortcuts
         self.table.keyPressEvent = self.table_key_press
+
+    def create_toolbar(self):
+        """Create the main toolbar with professional styling"""
+        toolbar = QToolBar("Main Toolbar")
+        toolbar.setObjectName("MainToolbar")
+        toolbar.setIconSize(QSize(24, 24))
+        toolbar.setMovable(False)
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        
+        # Professional styling with better spacing and appearance
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f8f8f8, stop:1 #e8e8e8);
+                border-bottom: 1px solid #c0c0c0;
+                spacing: 4px;
+                padding: 2px;
+            }
+            QToolButton {
+                font-size: 10px;
+                min-width: 40px;
+                padding: 2px;
+                margin: 1px;
+                border-radius: 3px;
+                background: transparent;
+            }
+            QToolButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #ffffff, stop:1 #e0e0e0);
+                border: 1px solid #b0b0b0;
+            }
+            QToolButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #d0d0d0, stop:1 #e8e8e8);
+                border: 1px solid #909090;
+            }
+            QToolButton:disabled {
+                color: #a0a0a0;
+            }
+        """)
+        
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+
+        # === FILE OPERATIONS GROUP ===
+        
+        # New Image
+        new_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon), "New", self)
+        new_action.setStatusTip("Create a new blank floppy disk image")
+        new_action.triggered.connect(self.create_new_image)
+        toolbar.addAction(new_action)
+        
+        # Open Image
+        open_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon), "Open", self)
+        open_action.setStatusTip("Open an existing floppy disk image")
+        open_action.triggered.connect(self.open_image)
+        toolbar.addAction(open_action)
+        
+        # Format
+        format_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DriveFDIcon), "Format", self)
+        format_action.setStatusTip("Format the disk (erase all files)")
+        format_action.triggered.connect(self.format_disk)
+        toolbar.addAction(format_action)
+        
+        toolbar.addSeparator()
+        
+        # === FILE MANAGEMENT GROUP ===
+        
+        # Add Files
+        add_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton), "Add", self)
+        add_action.setStatusTip("Add files to the floppy image")
+        add_action.triggered.connect(self.add_files)
+        toolbar.addAction(add_action)
+
+        # Extract Selected
+        extract_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton), "Extract", self)
+        extract_action.setStatusTip("Extract selected files to your computer")
+        extract_action.triggered.connect(self.extract_selected)
+        toolbar.addAction(extract_action)
+
+        # Extract All
+        extract_all_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon), "Ext. All", self)
+        extract_all_action.setStatusTip("Extract all files to a folder")
+        extract_all_action.triggered.connect(self.extract_all)
+        toolbar.addAction(extract_all_action)
+
+        toolbar.addSeparator()
+        
+        # === ARCHIVE OPERATIONS ===
+        
+        # Zip All
+        zip_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DriveCDIcon), "Zip", self)
+        zip_action.setStatusTip("Extract all files to a ZIP archive")
+        zip_action.triggered.connect(self.extract_all_to_zip)
+        toolbar.addAction(zip_action)
+
+        toolbar.addSeparator()
+        
+        # === DELETE OPERATIONS ===
+        
+        # Delete Selected
+        delete_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon), "Delete", self)
+        delete_action.setStatusTip("Delete selected files (Del key)")
+        delete_action.triggered.connect(self.delete_selected)
+        toolbar.addAction(delete_action)
+
+        # Delete All
+        delete_all_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton), "Del. All", self)
+        delete_all_action.setStatusTip("Delete all files from the disk")
+        delete_all_action.triggered.connect(self.delete_all)
+        toolbar.addAction(delete_all_action)
+        
+        toolbar.addSeparator()
+        
+        # === VIEW/UTILITY GROUP ===
+
+        # Refresh
+        refresh_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload), "Refresh", self)
+        refresh_action.setStatusTip("Reload the file list")
+        refresh_action.triggered.connect(self.refresh_file_list)
+        toolbar.addAction(refresh_action)
 
     def show_context_menu(self, position):
         """Show context menu for table"""
@@ -448,6 +546,9 @@ class FloppyManagerWindow(QMainWindow):
             palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(127, 127, 127))
             app.setPalette(palette)
             
+            # Update toolbar for dark mode
+            self.update_toolbar_style('dark')
+            
         else:  # light (default)
             # Light theme
             app.setStyleSheet("")
@@ -466,6 +567,104 @@ class FloppyManagerWindow(QMainWindow):
             palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
             palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
             app.setPalette(palette)
+            
+            # Update toolbar for light mode
+            self.update_toolbar_style('light')
+    
+    def update_toolbar_style(self, theme_mode):
+        """Update toolbar styling based on theme"""
+        # Find the toolbar
+        toolbars = self.findChildren(QToolBar)
+        if not toolbars:
+            return
+        
+        toolbar = toolbars[0]
+        
+        if theme_mode == 'dark':
+            toolbar.setStyleSheet("""
+                QToolBar {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #404040, stop:1 #353535);
+                    border-bottom: 1px solid #202020;
+                    spacing: 4px;
+                    padding: 2px;
+                }
+                QToolButton {
+                    font-size: 10px;
+                    min-width: 40px;
+                    padding: 2px;
+                    margin: 1px;
+                    border-radius: 3px;
+                    background: transparent;
+                    color: #ffffff;
+                }
+                QToolButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #505050, stop:1 #454545);
+                    border: 1px solid #606060;
+                }
+                QToolButton:pressed {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #303030, stop:1 #404040);
+                    border: 1px solid #505050;
+                }
+                QToolButton:disabled {
+                    color: #808080;
+                }
+            """)
+            
+            # Update info label for dark mode
+            self.info_label.setStyleSheet("""
+                QLabel {
+                    padding-right: 10px;
+                    font-weight: bold;
+                    font-size: 12px;
+                    color: #ffffff;
+                    background: transparent;
+                }
+            """)
+        else:  # light
+            toolbar.setStyleSheet("""
+                QToolBar {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #f8f8f8, stop:1 #e8e8e8);
+                    border-bottom: 1px solid #c0c0c0;
+                    spacing: 4px;
+                    padding: 2px;
+                }
+                QToolButton {
+                    font-size: 10px;
+                    min-width: 40px;
+                    padding: 2px;
+                    margin: 1px;
+                    border-radius: 3px;
+                    background: transparent;
+                }
+                QToolButton:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #ffffff, stop:1 #e0e0e0);
+                    border: 1px solid #b0b0b0;
+                }
+                QToolButton:pressed {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #d0d0d0, stop:1 #e8e8e8);
+                    border: 1px solid #909090;
+                }
+                QToolButton:disabled {
+                    color: #a0a0a0;
+                }
+            """)
+            
+            # Update info label for light mode
+            self.info_label.setStyleSheet("""
+                QLabel {
+                    padding-right: 10px;
+                    font-weight: bold;
+                    font-size: 12px;
+                    color: #333333;
+                    background: transparent;
+                }
+            """)
 
     def reset_settings(self):
         """Reset all settings to their default values"""
@@ -549,52 +748,57 @@ class FloppyManagerWindow(QMainWindow):
 
     def refresh_file_list(self):
         """Refresh the file list from the image"""
-        self.table.setRowCount(0)
-
-        if not self.image:
-            self.info_label.setText("No image loaded")
-            return
-
+        # Block signals to prevent itemChanged from firing during population
+        self.table.blockSignals(True)
         try:
-            entries = self.image.read_root_directory()
+            self.table.setRowCount(0)
 
-            for entry in entries:
-                if not entry['is_dir']:
-                    row = self.table.rowCount()
-                    self.table.insertRow(row)
+            if not self.image:
+                self.info_label.setText("")
+                return
 
-                    # Filename (long name) - EDITABLE
-                    filename_item = QTableWidgetItem(entry['name'])
-                    filename_item.setFlags(filename_item.flags() | Qt.ItemFlag.ItemIsEditable)
-                    self.table.setItem(row, 0, filename_item)
+            try:
+                entries = self.image.read_root_directory()
 
-                    # Short name (8.3) - READ ONLY
-                    short_name_item = QTableWidgetItem(entry['short_name'])
-                    short_name_item.setFlags(short_name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self.table.setItem(row, 1, short_name_item)
+                for entry in entries:
+                    if not entry['is_dir']:
+                        row = self.table.rowCount()
+                        self.table.insertRow(row)
 
-                    # Size - READ ONLY
-                    size_str = f"{entry['size']:,} bytes"
-                    size_item = QTableWidgetItem(size_str)
-                    size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self.table.setItem(row, 2, size_item)
+                        # Filename (long name) - EDITABLE
+                        filename_item = QTableWidgetItem(entry['name'])
+                        filename_item.setFlags(filename_item.flags() | Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 0, filename_item)
 
-                    # Type - READ ONLY
-                    type_item = QTableWidgetItem(entry['file_type'])
-                    type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self.table.setItem(row, 3, type_item)
+                        # Short name (8.3) - READ ONLY
+                        short_name_item = QTableWidgetItem(entry['short_name'])
+                        short_name_item.setFlags(short_name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 1, short_name_item)
 
-                    # Index (hidden) - READ ONLY
-                    index_item = QTableWidgetItem(str(entry['index']))
-                    index_item.setFlags(index_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                    self.table.setItem(row, 4, index_item)
+                        # Size - READ ONLY
+                        size_str = f"{entry['size']:,} bytes"
+                        size_item = QTableWidgetItem(size_str)
+                        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 2, size_item)
 
-            # Update info
-            self.info_label.setText(f"{len(entries)} files | {self.image.get_free_space():,} bytes free")
-            self.status_bar.showMessage(f"Loaded {len(entries)} files")
+                        # Type - READ ONLY
+                        type_item = QTableWidgetItem(entry['file_type'])
+                        type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 3, type_item)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to read directory: {e}")
+                        # Index (hidden) - READ ONLY
+                        index_item = QTableWidgetItem(str(entry['index']))
+                        index_item.setFlags(index_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 4, index_item)
+
+                # Update info
+                self.info_label.setText(f"{len(entries)} files | {self.image.get_free_space():,} bytes free")
+                self.status_bar.showMessage(f"Loaded {len(entries)} files")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to read directory: {e}")
+        finally:
+            self.table.blockSignals(False)
 
     def show_boot_sector_info(self):
         """Show boot sector information"""
@@ -763,6 +967,87 @@ class FloppyManagerWindow(QMainWindow):
             self.status_bar.showMessage(f"Extracted {success_count} file(s) to {save_dir}")
             QMessageBox.information(self, "Success", f"Extracted {success_count} file(s)")
 
+    def extract_all(self):
+        """Extract all files"""
+        if not self.image:
+            QMessageBox.information(self, "No Image Loaded", "No image loaded.")
+            return
+
+        entries = self.image.read_root_directory()
+        files_to_extract = [e for e in entries if not e['is_dir']]
+
+        if not files_to_extract:
+            QMessageBox.information(self, "Info", "No files to extract")
+            return
+
+        save_dir = QFileDialog.getExistingDirectory(self, "Select folder to save all files")
+        if not save_dir:
+            return
+
+        success_count = 0
+        for entry in files_to_extract:
+            try:
+                data = self.image.extract_file(entry)
+                output_path = os.path.join(save_dir, entry['name'])
+                with open(output_path, 'wb') as f:
+                    f.write(data)
+                success_count += 1
+            except Exception as e:
+                print(f"Failed to extract {entry['name']}: {e}")
+
+        if success_count > 0:
+            self.status_bar.showMessage(f"Extracted {success_count} file(s) to {save_dir}")
+            QMessageBox.information(self, "Success", f"Extracted {success_count} file(s)")
+
+    def extract_all_to_zip(self):
+        """Extract all files to a ZIP archive"""
+        if not self.image:
+            QMessageBox.information(self, "No Image Loaded", "No image loaded.")
+            return
+
+        entries = self.image.read_root_directory()
+        files_to_extract = [e for e in entries if not e['is_dir']]
+
+        if not files_to_extract:
+            QMessageBox.information(self, "Info", "No files to extract")
+            return
+
+        default_name = "floppy_content.zip"
+        if self.image_path:
+            default_name = Path(self.image_path).stem + ".zip"
+
+        zip_filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save as ZIP",
+            default_name,
+            "ZIP files (*.zip)"
+        )
+
+        if not zip_filename:
+            return
+            
+        if not zip_filename.lower().endswith('.zip'):
+            zip_filename += '.zip'
+
+        success_count = 0
+        try:
+            with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for entry in files_to_extract:
+                    try:
+                        data = self.image.extract_file(entry)
+                        # Use the long filename
+                        zipf.writestr(entry['name'], data)
+                        success_count += 1
+                    except Exception as e:
+                        print(f"Failed to extract {entry['name']} to zip: {e}")
+            
+            if success_count > 0:
+                self.status_bar.showMessage(f"Archived {success_count} file(s) to {Path(zip_filename).name}")
+                QMessageBox.information(self, "Success", f"Archived {success_count} file(s) to ZIP file")
+                
+        except Exception as e:
+             QMessageBox.critical(self, "Error", f"Failed to create ZIP file: {e}")
+
     def delete_selected(self):
         """Delete selected files"""
         if not self.image:
@@ -801,6 +1086,38 @@ class FloppyManagerWindow(QMainWindow):
 
         self.refresh_file_list()
 
+        if success_count > 0:
+            self.status_bar.showMessage(f"Deleted {success_count} file(s)")
+
+    def delete_all(self):
+        """Delete all files"""
+        if not self.image:
+            QMessageBox.information(self, "No Image Loaded", "No image loaded.")
+            return
+
+        entries = self.image.read_root_directory()
+        files_to_delete = [e for e in entries if not e['is_dir']]
+
+        if not files_to_delete:
+            QMessageBox.information(self, "Info", "No files to delete")
+            return
+
+        if self.confirm_delete:
+            response = QMessageBox.question(
+                self,
+                "Confirm Delete All",
+                f"Delete ALL {len(files_to_delete)} file(s) from the disk image?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if response == QMessageBox.StandardButton.No:
+                return
+
+        success_count = 0
+        for entry in files_to_delete:
+            if self.image.delete_file(entry):
+                success_count += 1
+
+        self.refresh_file_list()
         if success_count > 0:
             self.status_bar.showMessage(f"Deleted {success_count} file(s)")
 
