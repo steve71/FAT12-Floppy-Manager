@@ -805,3 +805,14 @@ class TestHelperMethods:
         # Predict collision
         assert handler.predict_short_name("File.txt", use_numeric_tail=True) == "FILE~1  TXT"
         assert handler.predict_short_name("NewFile.txt") == "NEWFILE TXT"
+
+    def test_get_total_cluster_count(self, tmp_path):
+        img_path = tmp_path / "test_cluster_count.img"
+        FAT12Image.create_empty_image(str(img_path))
+        handler = FAT12Image(str(img_path))
+        
+        # Standard 1.44MB floppy
+        # FAT size = 9 sectors * 512 bytes = 4608 bytes
+        # Entries = (4608 * 8) / 12 = 3072
+        # Result should be min(3072, 4084) = 3072
+        assert handler.get_total_cluster_count() == 3072

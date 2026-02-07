@@ -518,8 +518,7 @@ class FloppyManagerWindow(QMainWindow):
                     self.table.setItem(row, 2, size_item)
 
                     # Type - READ ONLY
-                    file_type = Path(entry['name']).suffix.upper().lstrip('.')
-                    type_item = QTableWidgetItem(file_type)
+                    type_item = QTableWidgetItem(entry['file_type'])
                     type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.table.setItem(row, 3, type_item)
 

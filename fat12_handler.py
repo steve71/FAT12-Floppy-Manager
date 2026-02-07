@@ -27,6 +27,7 @@ Core functionality for reading/writing FAT12 floppy disk images with VFAT long f
 
 import struct
 import datetime
+from pathlib import Path
 from typing import List, Optional
 
 from vfat_utils import (decode_fat_time, decode_fat_date,
@@ -104,6 +105,10 @@ class FAT12Image:
         """Calculate total number of entries in the FAT"""
         fat_size_bytes = self.sectors_per_fat * self.bytes_per_sector
         return (fat_size_bytes * 8) // 12
+
+    def get_total_cluster_count(self) -> int:
+        """Get the total number of addressable clusters (limited by FAT12 spec)"""
+        return min(self.get_fat_entry_count(), 4084)
 
     def get_free_space(self) -> int:
         """Get free space in bytes"""
@@ -278,11 +283,15 @@ class FAT12Image:
                     last_accessed_str = decode_fat_date(last_accessed_date)
                     last_modified_datetime_str = f"{decode_fat_date(last_modified_date)} {decode_fat_time(last_modified_time)}"
                     
+                    # Derive file type from name
+                    file_type = Path(display_name).suffix.upper().lstrip('.')
+
                     entries.append({
                         'name': display_name,
                         'short_name': short_name_83,
                         'size': size,
                         'cluster': cluster,
+                        'file_type': file_type,
                         'index': i,
                         'is_read_only': bool(attr & 0x01),
                         'is_hidden': bool(attr & 0x02),

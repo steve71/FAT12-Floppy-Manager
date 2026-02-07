@@ -332,7 +332,7 @@ class FATViewer(QDialog):
         # Calculate total number of clusters
         # FAT12 has 12 bits per entry, so we can calculate max clusters
         # based on FAT size
-        self.total_clusters = min(self.image.get_fat_entry_count(), 4084)
+        self.total_clusters = self.image.get_total_cluster_count()
         
         # Build cluster to filename mapping
         self.cluster_to_file = self.image.get_cluster_map()
