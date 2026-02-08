@@ -432,13 +432,14 @@ class FAT12Image:
             
         return chain
 
-    def write_file_to_image(self, filename: str, data: bytes, use_numeric_tail: bool = False) -> bool:
+    def write_file_to_image(self, filename: str, data: bytes, use_numeric_tail: bool = False, modification_dt: Optional[datetime.datetime] = None) -> bool:
         """Write a file to the disk image with VFAT long filename support
         
         Args:
             filename: Original filename (can be long)
             data: File data
             use_numeric_tail: Whether to use numeric tails for 8.3 name generation
+            modification_dt: Optional modification datetime (defaults to now)
             
         Returns:
             True if successful, False otherwise
@@ -511,15 +512,19 @@ class FAT12Image:
             
             # Set date/time (current)
             now = datetime.datetime.now()
+            mod_dt = modification_dt if modification_dt is not None else now
+
             creation_time = encode_fat_time(now)
             creation_date = encode_fat_date(now)
+            modified_time = encode_fat_time(mod_dt)
+            modified_date = encode_fat_date(mod_dt)
             
             entry[13] = 0  # Creation time tenth
             entry[14:16] = struct.pack('<H', creation_time)
             entry[16:18] = struct.pack('<H', creation_date)
             entry[18:20] = struct.pack('<H', creation_date)  # Last access date
-            entry[22:24] = struct.pack('<H', creation_time)  # Last modified time
-            entry[24:26] = struct.pack('<H', creation_date)  # Last modified date
+            entry[22:24] = struct.pack('<H', modified_time)  # Last modified time
+            entry[24:26] = struct.pack('<H', modified_date)  # Last modified date
             
             if len(data) > 0:
                 entry[26:28] = struct.pack('<H', free_clusters[0])  # First cluster

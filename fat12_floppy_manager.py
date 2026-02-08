@@ -1080,6 +1080,13 @@ class FloppyManagerWindow(QMainWindow):
                 path_obj = Path(filepath)
                 original_name = path_obj.name
 
+                # Get modification time
+                try:
+                    stat = path_obj.stat()
+                    modification_dt = datetime.fromtimestamp(stat.st_mtime)
+                except Exception:
+                    modification_dt = None
+
                 # Predict the 8.3 name that will be used
                 short_name_83 = self.image.predict_short_name(original_name, self.use_numeric_tail)
                 
@@ -1109,7 +1116,7 @@ class FloppyManagerWindow(QMainWindow):
                     self.image.delete_file(collision_entry)
 
                 # Write the new file
-                if self.image.write_file_to_image(original_name, data, self.use_numeric_tail):
+                if self.image.write_file_to_image(original_name, data, self.use_numeric_tail, modification_dt):
                     success_count += 1
                 else:
                     fail_count += 1
