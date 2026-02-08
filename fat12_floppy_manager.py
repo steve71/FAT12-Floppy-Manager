@@ -350,38 +350,6 @@ class FloppyManagerWindow(QMainWindow):
         toolbar.setMovable(False)
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         
-        # Professional styling with better spacing and appearance
-        toolbar.setStyleSheet("""
-            QToolBar {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #f8f8f8, stop:1 #e8e8e8);
-                border-bottom: 1px solid #c0c0c0;
-                spacing: 4px;
-                padding: 2px;
-            }
-            QToolButton {
-                font-size: 10px;
-                min-width: 40px;
-                padding: 2px;
-                margin: 1px;
-                border-radius: 3px;
-                background: transparent;
-            }
-            QToolButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #ffffff, stop:1 #e0e0e0);
-                border: 1px solid #b0b0b0;
-            }
-            QToolButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #d0d0d0, stop:1 #e8e8e8);
-                border: 1px solid #909090;
-            }
-            QToolButton:disabled {
-                color: #a0a0a0;
-            }
-        """)
-        
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
 
         # === FILE OPERATIONS GROUP ===
@@ -1440,7 +1408,6 @@ class FloppyManagerWindow(QMainWindow):
                 self,
                 "Success",
                 f"Created new {item} image:\n{Path(filename).name}"
-                f"Created new floppy image:\n{Path(filename).name}"
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create image: {e}")
