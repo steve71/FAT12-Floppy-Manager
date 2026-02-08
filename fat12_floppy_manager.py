@@ -32,8 +32,9 @@ import zipfile
 import tempfile
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
-from vfat_utils import format_83_name, split_filename_for_editing
+from vfat_utils import format_83_name, split_filename_for_editing, decode_fat_datetime
 
 
 from PyQt6.QtWidgets import (
@@ -50,6 +51,18 @@ from fat12_handler import FAT12Image
 from gui_components import BootSectorViewer, RootDirectoryViewer, FATViewer, FileAttributesDialog
 
 from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit
+
+class SortableTableWidgetItem(QTableWidgetItem):
+    """Table item that sorts based on UserRole data if available, otherwise text"""
+    def __lt__(self, other):
+        # Get sort data
+        my_data = self.data(Qt.ItemDataRole.UserRole)
+        other_data = other.data(Qt.ItemDataRole.UserRole)
+        
+        if my_data is not None and other_data is not None:
+            return my_data < other_data
+            
+        return super().__lt__(other)
 
 class FileTableWidget(QTableWidget):
     """Custom TableWidget that supports dragging files out and dropping files in"""
@@ -80,7 +93,7 @@ class FileTableWidget(QTableWidget):
             
             for row in selected_rows:
                 # Get index from hidden column 5
-                index_item = self.item(row, 5)
+                index_item = self.item(row, 6)
                 if not index_item:
                     continue
                     
@@ -258,13 +271,13 @@ class FloppyManagerWindow(QMainWindow):
         # Main layout
         layout = QVBoxLayout(central_widget)
 
-        # File table - now with 5 columns
+        # File table - now with 7 columns
         self.table = FileTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(['Filename', 'Short Name (8.3)', 'Size', 'Type', 'Attr', 'Index'])
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(['Filename', 'Short Name (8.3)', 'Date Modified', 'Type', 'Size', 'Attr', 'Index'])
 
         # Hide the index column (used internally)
-        self.table.setColumnHidden(5, True)
+        self.table.setColumnHidden(6, True)
 
         # Configure table
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -289,10 +302,11 @@ class FloppyManagerWindow(QMainWindow):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Filename
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Short name
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Size
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Date Modified
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Type
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)             # Attr
-        self.table.setColumnWidth(4, 50)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Size
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)             # Attr
+        self.table.setColumnWidth(5, 50)
 
         # Handle clicks for rename and extract
         self.table.clicked.connect(self.on_table_clicked)
@@ -917,16 +931,36 @@ class FloppyManagerWindow(QMainWindow):
                         short_name_item.setFlags(short_name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                         self.table.setItem(row, 1, short_name_item)
 
-                        # Size - READ ONLY
-                        size_str = f"{entry['size']:,} bytes"
-                        size_item = QTableWidgetItem(size_str)
-                        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                        self.table.setItem(row, 2, size_item)
+                        # Date Modified - READ ONLY
+                        date_int = entry['last_modified_date']
+                        time_int = entry['last_modified_time']
+                        
+                        dt = decode_fat_datetime(date_int, time_int)
+                        
+                        if dt:
+                            # Format: 10/25/2023 02:30 PM
+                            date_str = dt.strftime("%m/%d/%Y %I:%M %p")
+                            sort_key = int(dt.timestamp())
+                        else:
+                            date_str = ""
+                            sort_key = -1
+                            
+                        date_item = SortableTableWidgetItem(date_str)
+                        date_item.setData(Qt.ItemDataRole.UserRole, sort_key) # Sort by timestamp
+                        date_item.setFlags(date_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 2, date_item)
 
                         # Type - READ ONLY
                         type_item = QTableWidgetItem(entry['file_type'])
                         type_item.setFlags(type_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                         self.table.setItem(row, 3, type_item)
+
+                        # Size - READ ONLY
+                        size_str = f"{entry['size']:,} bytes"
+                        size_item = SortableTableWidgetItem(size_str)
+                        size_item.setData(Qt.ItemDataRole.UserRole, entry['size']) # Sort by actual size
+                        size_item.setFlags(size_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                        self.table.setItem(row, 4, size_item)
 
                         # Attr - READ ONLY
                         attr_str = ""
@@ -950,12 +984,12 @@ class FloppyManagerWindow(QMainWindow):
                             attr_item.setToolTip(", ".join(tooltip_parts))
                         attr_item.setFlags(attr_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                         attr_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        self.table.setItem(row, 4, attr_item)
+                        self.table.setItem(row, 5, attr_item)
 
                         # Index (hidden) - READ ONLY
                         index_item = QTableWidgetItem(str(entry['index']))
                         index_item.setFlags(index_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                        self.table.setItem(row, 5, index_item)
+                        self.table.setItem(row, 6, index_item)
 
                 # Update info
                 self.info_label.setText(f"{len(entries)} files | {self.image.get_free_space():,} bytes free")
@@ -1116,7 +1150,7 @@ class FloppyManagerWindow(QMainWindow):
         success_count = 0
 
         for row in selected_rows:
-            entry_index = int(self.table.item(row, 4).text())
+            entry_index = int(self.table.item(row, 6).text())
             entry = next((e for e in entries if e['index'] == entry_index), None)
 
             if entry:
@@ -1246,7 +1280,7 @@ class FloppyManagerWindow(QMainWindow):
         read_only_files = []
 
         for row in selected_rows:
-            entry_index = int(self.table.item(row, 5).text())
+            entry_index = int(self.table.item(row, 6).text())
             entry = next((e for e in entries if e['index'] == entry_index), None)
             if entry:
                 files_to_delete.append(entry)
@@ -1596,7 +1630,7 @@ class FloppyManagerWindow(QMainWindow):
         row = list(selected_rows)[0]
         
         # Get the file entry from the hidden index column
-        index = int(self.table.item(row, 5).text())
+        index = int(self.table.item(row, 6).text())
         entries = self.image.read_root_directory()
         entry = next((e for e in entries if e['index'] == index), None)
         
@@ -1652,7 +1686,7 @@ class FloppyManagerWindow(QMainWindow):
             row = item.row()
             
             # Get the entry index from the hidden column
-            index_item = self.table.item(row, 5)
+            index_item = self.table.item(row, 6)
             if not index_item:
                 self._editing_in_progress = False
                 return

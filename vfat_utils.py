@@ -54,6 +54,21 @@ def decode_fat_date(date_value: int) -> str:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
+def decode_fat_datetime(date_value: int, time_value: int) -> Optional[datetime.datetime]:
+    """Decode FAT date and time values into a datetime object"""
+    year = ((date_value >> 9) & 0x7F) + 1980
+    month = (date_value >> 5) & 0x0F
+    day = date_value & 0x1F
+    
+    hour = (time_value >> 11) & 0x1F
+    minute = (time_value >> 5) & 0x3F
+    second = (time_value & 0x1F) * 2
+    
+    try:
+        return datetime.datetime(year, month, day, hour, minute, second)
+    except ValueError:
+        return None
+
 def encode_fat_time(dt: datetime.datetime) -> int:
     """Encode datetime to FAT time format"""
     return (dt.hour << 11) | (dt.minute << 5) | (dt.second // 2)

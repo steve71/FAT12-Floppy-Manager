@@ -8,7 +8,8 @@ from vfat_utils import (
     calculate_lfn_checksum, create_lfn_entries,
     parse_raw_lfn_entry, parse_raw_short_entry,
     decode_lfn_text, decode_short_name,
-    format_83_name, get_raw_entry_chain,
+    format_83_name, get_raw_entry_chain, 
+    decode_fat_datetime,
     decode_raw_83_name
 )
 
@@ -59,6 +60,26 @@ class TestTimeDate:
         # Day 0
         invalid_day_zero = ((2023-1980) << 9) | (1 << 5) | 0
         assert decode_fat_date(invalid_day_zero) == "Invalid"
+
+    def test_decode_fat_datetime(self):
+        # 2023-10-25 10:30:10
+        date_val = ((2023-1980) << 9) | (10 << 5) | 25
+        time_val = (10 << 11) | (30 << 5) | 5
+        
+        dt = decode_fat_datetime(date_val, time_val)
+        assert dt is not None
+        assert dt.year == 2023
+        assert dt.month == 10
+        assert dt.day == 25
+        assert dt.hour == 10
+        assert dt.minute == 30
+        assert dt.second == 10
+
+    def test_decode_fat_datetime_invalid(self):
+        # Invalid month 13
+        date_val = ((2023-1980) << 9) | (13 << 5) | 1
+        time_val = 0
+        assert decode_fat_datetime(date_val, time_val) is None
 
 class Test83NameGeneration:
     def test_83_name_generation(self):
