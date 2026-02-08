@@ -963,8 +963,12 @@ class FAT12Image:
             print(f"Error setting file attributes: {e}")
             return False
 
-    def format_disk(self):
-        """Format the disk - erase all files and reset FAT to clean state"""
+    def format_disk(self, full_format: bool = False):
+        """Format the disk - erase all files and reset FAT to clean state
+        
+        Args:
+            full_format: If True, also zero out the data area (slower but more secure)
+        """
         with open(self.image_path, 'r+b') as f:
             # Clear root directory
             f.seek(self.root_start)
@@ -981,3 +985,19 @@ class FAT12Image:
                 offset = self.fat_start + (i * self.sectors_per_fat * self.bytes_per_sector)
                 f.seek(offset)
                 f.write(fat_data)
+            
+            # If full format, clear data area
+            if full_format:
+                f.seek(self.data_start)
+                # Calculate data size
+                total_size = self.total_sectors * self.bytes_per_sector
+                data_size = total_size - self.data_start
+                
+                # Write in chunks
+                chunk_size = 65536
+                zeros = b'\x00' * chunk_size
+                remaining = data_size
+                while remaining > 0:
+                    write_size = min(remaining, chunk_size)
+                    f.write(zeros[:write_size])
+                    remaining -= write_size

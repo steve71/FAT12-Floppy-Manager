@@ -41,7 +41,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTableWidget, QTableWidgetItem, QFileDialog,
     QMessageBox, QLabel, QStatusBar, QMenuBar, QMenu, QHeaderView,
-    QDialog, QTabWidget, QToolBar, QStyle, QSizePolicy, QInputDialog
+    QDialog, QTabWidget, QToolBar, QStyle, QSizePolicy, QInputDialog,
+    QRadioButton, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, QSettings, QTimer, QSize, QMimeData, QUrl
 from PyQt6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor, QDrag
@@ -193,6 +194,38 @@ class RenameDelegate(QStyledItemDelegate):
                 full_name, start, end = split_filename_for_editing(text)
                 editor.setFocus()
                 editor.setSelection(start, end - start)
+
+class FormatDialog(QDialog):
+    """Dialog for selecting format options with explanations"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Format Options")
+        self.full_format = False
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        lbl = QLabel("Select format type:")
+        layout.addWidget(lbl)
+        
+        self.rb_quick = QRadioButton("Quick Format")
+        self.rb_quick.setToolTip("Clears the File Allocation Table (FAT) and Root Directory.\nData remains on disk but is marked as free by clearing the FAT.")
+        self.rb_quick.setChecked(True)
+        layout.addWidget(self.rb_quick)
+        
+        self.rb_full = QRadioButton("Full Format")
+        self.rb_full.setToolTip("Clears File Allocation Table (FAT), Root Directory, and overwrites all data sectors with zeros.\nEnsures all data is permanently erased.")
+        layout.addWidget(self.rb_full)
+        
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+        
+    def accept(self):
+        self.full_format = self.rb_full.isChecked()
+        super().accept()
 
 class FloppyManagerWindow(QMainWindow):
     """Main window for the floppy manager"""
@@ -1452,11 +1485,20 @@ class FloppyManagerWindow(QMainWindow):
             QMessageBox.information(self, "No Image Loaded", "No image loaded to format.")
             return
         
+        # Ask for format type
+        dialog = FormatDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+            
+        full_format = dialog.full_format
+        format_type_desc = "FULL" if full_format else "QUICK"
+        
         response = QMessageBox.warning(
             self,
             "Format Disk",
             "⚠️ WARNING: This will permanently erase ALL files on the disk!\n\n"
             f"Disk: {Path(self.image_path).name}\n\n"
+            f"Type: {format_type_desc} FORMAT\n\n"
             "Are you sure you want to format this disk?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No  # Default to No for safety
@@ -1467,7 +1509,7 @@ class FloppyManagerWindow(QMainWindow):
         
         try:
             # Format the disk
-            self.image.format_disk()
+            self.image.format_disk(full_format=full_format)
             
             # Refresh the file list to show empty disk
             self.refresh_file_list()
@@ -1475,10 +1517,10 @@ class FloppyManagerWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Format Complete",
-                "Disk has been formatted successfully.\nAll files have been erased."
+                f"Disk has been formatted successfully ({format_type_desc}).\nAll files have been erased."
             )
             
-            self.status_bar.showMessage("Disk formatted - all files erased")
+            self.status_bar.showMessage(f"Disk formatted ({format_type_desc}) - all files erased")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to format disk: {e}")
 
