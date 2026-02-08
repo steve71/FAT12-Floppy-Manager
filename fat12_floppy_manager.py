@@ -29,6 +29,7 @@ import sys
 import os
 import shutil
 import zipfile
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -41,14 +42,119 @@ from PyQt6.QtWidgets import (
     QMessageBox, QLabel, QStatusBar, QMenuBar, QMenu, QHeaderView,
     QDialog, QTabWidget, QToolBar, QStyle, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QSettings, QTimer, QSize
-from PyQt6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor
+from PyQt6.QtCore import Qt, QSettings, QTimer, QSize, QMimeData, QUrl
+from PyQt6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor, QDrag
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
 from gui_components import BootSectorViewer, RootDirectoryViewer, FATViewer, FileAttributesDialog
 
 from PyQt6.QtWidgets import QStyledItemDelegate, QLineEdit
+
+class FileTableWidget(QTableWidget):
+    """Custom TableWidget that supports dragging files out and dropping files in"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QTableWidget.DragDropMode.DragDrop)
+    
+    def startDrag(self, supportedActions):
+        # Get main window reference to access image
+        main_window = self.window()
+        if not hasattr(main_window, 'image') or not main_window.image:
+            return
+
+        selected_rows = set(item.row() for item in self.selectedItems())
+        if not selected_rows:
+            return
+
+        # Create a temporary directory
+        temp_dir = tempfile.mkdtemp(prefix="fat12_drag_")
+        
+        try:
+            urls = []
+            entries = main_window.image.read_root_directory()
+            
+            files_exported = False
+            
+            for row in selected_rows:
+                # Get index from hidden column 5
+                index_item = self.item(row, 5)
+                if not index_item:
+                    continue
+                    
+                entry_index = int(index_item.text())
+                entry = next((e for e in entries if e['index'] == entry_index), None)
+                
+                if entry and not entry['is_dir']:
+                    try:
+                        data = main_window.image.extract_file(entry)
+                        filename = entry['name']
+                        filepath = os.path.join(temp_dir, filename)
+                        
+                        with open(filepath, 'wb') as f:
+                            f.write(data)
+                        
+                        urls.append(QUrl.fromLocalFile(filepath))
+                        files_exported = True
+                    except Exception as e:
+                        print(f"Error extracting {entry['name']} for drag: {e}")
+            
+            if not files_exported:
+                return
+
+            drag = QDrag(self)
+            mime_data = QMimeData()
+            mime_data.setUrls(urls)
+            drag.setMimeData(mime_data)
+            
+            # Execute drag - blocks until drop is finished
+            drag.exec(Qt.DropAction.CopyAction)
+            
+        finally:
+            # Cleanup temp dir after drag is done
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            main_window = self.window()
+            
+            if not hasattr(main_window, 'image') or not main_window.image:
+                QMessageBox.information(
+                    self,
+                    "No Image Loaded",
+                    "Please create a new image or open an existing one first."
+                )
+                event.ignore()
+                return
+
+            files = []
+            for url in event.mimeData().urls():
+                filepath = url.toLocalFile()
+                if filepath and Path(filepath).is_file():
+                    files.append(filepath)
+            
+            if files:
+                event.acceptProposedAction()
+                main_window.add_files_from_list(files)
+        else:
+            super().dropEvent(event)
 
 class RenameDelegate(QStyledItemDelegate):
     """Custom delegate that selects only filename (not extension) when editing starts"""
@@ -132,9 +238,6 @@ class FloppyManagerWindow(QMainWindow):
         self.setWindowTitle("FAT12 Floppy Manager")
         self.setGeometry(400, 200, 620, 500)
 
-        # Enable drag and drop
-        self.setAcceptDrops(True)
-
         # Set window icon if available
         icon_path = Path(__file__).parent / 'floppy_icon.ico'
         if icon_path.exists():
@@ -156,7 +259,7 @@ class FloppyManagerWindow(QMainWindow):
         layout = QVBoxLayout(central_widget)
 
         # File table - now with 5 columns
-        self.table = QTableWidget()
+        self.table = FileTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(['Filename', 'Short Name (8.3)', 'Size', 'Type', 'Attr', 'Index'])
 
@@ -1378,42 +1481,6 @@ class FloppyManagerWindow(QMainWindow):
         self.settings.setValue('window_state', self.saveState())
 
         event.accept()
-
-    def dragEnterEvent(self, event):
-        """Handle drag enter event"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        """Handle drop event - add files to floppy"""
-        if not self.image:
-            QMessageBox.information(
-                self,
-                "No Image Loaded",
-                "Please create a new image or open an existing one first."
-            )
-            event.ignore()
-            return
-
-        # Get dropped files
-        files = []
-        for url in event.mimeData().urls():
-            filepath = url.toLocalFile()
-            if filepath and Path(filepath).is_file():
-                files.append(filepath)
-
-        if not files:
-            event.ignore()
-            return
-
-        event.acceptProposedAction()
-
-        # Add files using existing method
-        self.add_files_from_list(files)
-
-
 
     def on_selection_changed(self):
         """Reset click tracking when selection changes"""
