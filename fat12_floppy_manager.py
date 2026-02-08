@@ -1032,6 +1032,9 @@ class FloppyManagerWindow(QMainWindow):
         if not self.image:
             return
 
+        # Sort files by name (case-insensitive) to ensure deterministic order
+        filenames.sort(key=lambda x: Path(x).name.lower())
+
         success_count = 0
         fail_count = 0
 
