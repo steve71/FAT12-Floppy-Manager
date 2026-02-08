@@ -1432,7 +1432,6 @@ class FloppyManagerWindow(QMainWindow):
         try:
             # Create a blank 1.44MB floppy image using the handler
             FAT12Image.create_empty_image(filename, selected_key)
-            FAT12Image.create_empty_image(filename)
 
             # Load the new image
             self.load_image(filename)
