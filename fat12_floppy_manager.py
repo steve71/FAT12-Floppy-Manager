@@ -1448,7 +1448,8 @@ class FloppyManagerWindow(QMainWindow):
         <li>Writes directly to the image file without needing to mount it as a drive</li>
         <li>Displays both long filenames and 8.3 short names</li>
         <li>Save copies of floppy images</li>
-        <li>Drag and drop files to add them</li>
+        <li>Drag and drop support (add files by dropping in, extract by dragging out)</li>
+        <li>View and edit file attributes (Read-only, Hidden, System, Archive)</li>
         <li>Rename files (Windows-style inline editing)</li>
         <li>Delete files (selected or all)</li>
         <li>Extract files (selected, all, or to ZIP)</li>
