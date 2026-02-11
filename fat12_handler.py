@@ -625,7 +625,7 @@ class FAT12Image:
         return bytes(data[:entry['size']])
     
     @staticmethod
-    def create_empty_image(filepath: str, format_key: str = '1.44M'):
+    def create_empty_image(filepath: str, format_key: str = '1.44M', oem_name: str = 'MSDOS5.0'):
         """Create a blank FAT12 floppy disk image"""
         if format_key not in FAT12Image.FORMATS:
             raise ValueError(f"Unknown format: {format_key}")
@@ -652,7 +652,10 @@ class FAT12Image:
             
             boot_sector = bytearray(512)
             boot_sector[0:3] = b'\xEB\x3C\x90'
-            boot_sector[3:11] = b'YAMAHA  '  
+            
+            # OEM Name (8 bytes, space padded)
+            oem_bytes = oem_name.encode('ascii', 'replace')[:8].ljust(8, b' ')
+            boot_sector[3:11] = oem_bytes
             boot_sector[11:13] = bytes_per_sector.to_bytes(2, 'little')
             boot_sector[13] = sectors_per_cluster
             boot_sector[14:16] = reserved_sectors.to_bytes(2, 'little')

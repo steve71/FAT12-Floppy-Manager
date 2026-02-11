@@ -32,7 +32,8 @@ from PySide6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, 
 from fat12_handler import FAT12Image
 from gui_components import (
     BootSectorViewer, DirectoryViewer, FATViewer, FileAttributesDialog,
-    SortableTreeWidgetItem, FileTreeWidget, RenameDelegate, FormatDialog
+    SortableTreeWidgetItem, FileTreeWidget, RenameDelegate, FormatDialog,
+    NewImageDialog
 )
 
 from PySide6.QtWidgets import QLineEdit
@@ -1394,24 +1395,16 @@ class FloppyManagerWindow(QMainWindow):
 
     def create_new_image(self):
         """Create a new blank floppy disk image"""
-        # Ask for format
+        # Ask for format and OEM Name
         formats = list(FAT12Image.FORMATS.keys())
         display_names = [FAT12Image.FORMATS[k]['name'] for k in formats]
         
-        item, ok = QInputDialog.getItem(
-            self, 
-            "Select Disk Format", 
-            "Choose floppy disk format:", 
-            display_names, 
-            0, # Default to first (1.44M)
-            False # Not editable
-        )
-        
-        if not ok or not item:
+        dialog = NewImageDialog(formats, display_names, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
             
-        # Map back to key
-        selected_key = formats[display_names.index(item)]
+        selected_key = dialog.selected_format
+        oem_name = dialog.oem_name
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
@@ -1429,7 +1422,7 @@ class FloppyManagerWindow(QMainWindow):
 
         try:
             # Create a blank 1.44MB floppy image using the handler
-            FAT12Image.create_empty_image(filename, selected_key)
+            FAT12Image.create_empty_image(filename, selected_key, oem_name)
 
             # Load the new image
             self.load_image(filename)
@@ -1437,7 +1430,7 @@ class FloppyManagerWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Success",
-                f"Created new {item} image:\n{Path(filename).name}"
+                f"Created new image:\n{Path(filename).name}"
             )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to create image: {e}")

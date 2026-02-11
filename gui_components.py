@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, 
     QTabWidget, QHeaderView, QPushButton, QLabel, QGridLayout,
     QWidget, QScrollArea, QSizePolicy, QSpinBox, QFrame, QApplication,
-    QTreeWidget, QTreeWidgetItem, QStyledItemDelegate, QLineEdit,
+    QTreeWidget, QTreeWidgetItem, QStyledItemDelegate, QLineEdit, QComboBox,
     QRadioButton, QDialogButtonBox, QMessageBox
 )
 from PySide6.QtCore import Qt, QSize, QTimer, QMimeData, QUrl
@@ -1057,3 +1057,58 @@ class FormatDialog(QDialog):
     def accept(self):
         self.full_format = self.rb_full.isChecked()
         super().accept()
+
+class NewImageDialog(QDialog):
+    """Dialog for creating a new image with format selection and OEM name"""
+    def __init__(self, formats, display_names, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create New Image")
+        self.formats = formats
+        self.display_names = display_names
+        self.selected_format = formats[0] if formats else '1.44M'
+        self.oem_name = "MSDOS5.0"
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        layout.addWidget(QLabel("Select Disk Format:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(self.display_names)
+        layout.addWidget(self.format_combo)
+        
+        layout.addWidget(QLabel("OEM Name (Max 8 chars):"))
+        self.oem_input = QLineEdit()
+        self.oem_input.setMaxLength(8)
+        self.oem_input.setText(self.oem_name)
+        self.oem_input.setPlaceholderText("MSDOS5.0")
+        self.oem_input.setToolTip("MSDOS5.0 is recommended for maximum compatibility.")
+        self.oem_input.selectAll()
+        layout.addWidget(self.oem_input)
+        
+        # Add spacing
+        layout.addSpacing(10)
+        
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(self.validate)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def validate(self):
+        name = self.oem_input.text()
+        
+        # Check for ASCII
+        try:
+            name.encode('ascii')
+        except UnicodeEncodeError:
+            QMessageBox.warning(self, "Invalid Name", "OEM Name must be ASCII characters only.")
+            return
+            
+        # Check for safe characters (Alphanumeric + standard punctuation)
+        if not all(c.isalnum() or c in " .-_" for c in name):
+            QMessageBox.warning(self, "Invalid Name", "OEM Name contains invalid characters.\nAllowed: A-Z, 0-9, space, period, dash, underscore.")
+            return
+            
+        self.oem_name = name
+        self.selected_format = self.formats[self.format_combo.currentIndex()]
+        self.accept()
