@@ -739,6 +739,7 @@ class FloppyManagerWindow(QMainWindow):
         # Block signals to prevent itemChanged from firing during population
         self.table.blockSignals(True)
         self.table.setSortingEnabled(False)
+        self.table.setUpdatesEnabled(False)
         try:
             self.table.clear()
 
@@ -750,9 +751,25 @@ class FloppyManagerWindow(QMainWindow):
                 # Get search text
                 search_text = self.search_input.text().lower().strip() if hasattr(self, 'search_input') else ""
                 
-                def add_items(parent_item, cluster):
+                # Iterative approach to prevent stack overflow and segfaults
+                # Stack contains tuples: (parent_item, cluster_id)
+                # Start with Root (cluster None)
+                stack = [(None, None)] 
+                visited_dirs = set()
+                file_count = 0
+                
+                while stack:
+                    parent_item, cluster = stack.pop()
+                    
+                    # Prevent infinite recursion / loops
+                    # Use a unique key for visited check. Root is None.
+                    cluster_key = cluster if cluster is not None else -1
+                    if cluster_key in visited_dirs:
+                        continue
+                    visited_dirs.add(cluster_key)
+
                     entries = self.image.read_directory(cluster)
-                    count = 0
+                    
                     for entry in entries:
                         if entry['name'] in ('.', '..'): continue
                         
@@ -831,21 +848,21 @@ class FloppyManagerWindow(QMainWindow):
                         # Icon & Recursion
                         if entry['is_dir']:
                             item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon))
-                            add_items(item, entry['cluster'])
+                            stack.append((item, entry['cluster']))
                         else:
                             item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
-                            count += 1
-                    return count
+                            file_count += 1
 
-                file_count = add_items(None, None)
                 self.info_label.setText(f"{file_count} files | {self.image.get_free_space():,} bytes free")
                 self.status_bar.showMessage(f"Loaded {file_count} files")
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to read directory: {e}")
         finally:
-            self.table.setSortingEnabled(True)
+            self.table.setUpdatesEnabled(True)
             self.table.blockSignals(False)
+            # Defer sorting to prevent potential segfaults during heavy updates
+            QTimer.singleShot(10, lambda: self.table.setSortingEnabled(True))
 
     def show_boot_sector_info(self):
         """Show boot sector information"""
