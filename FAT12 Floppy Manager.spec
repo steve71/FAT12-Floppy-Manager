@@ -5,7 +5,7 @@ a = Analysis(
     ['fat12_floppy_manager.py'],
     pathex=[],
     binaries=[],
-    datas=[('fat12_handler.py', '.')],
+    datas=[('floppy_icon.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

@@ -770,6 +770,10 @@ class FloppyManagerWindow(QMainWindow):
 
                     entries = self.image.read_directory(cluster)
                     
+                    # Pre-sort entries to match default view (Directories first, then Filename)
+                    # This reduces visual flicker when sorting is re-enabled
+                    entries.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
+                    
                     for entry in entries:
                         if entry['name'] in ('.', '..'): continue
                         
