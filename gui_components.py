@@ -914,7 +914,14 @@ class FileTreeWidget(QTreeWidget):
 
     def dragMoveEvent(self, event):
         if event.mimeData().hasUrls():
-            event.acceptProposedAction()
+            # Check for Ctrl key to toggle Copy/Move
+            if event.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier:
+                event.setDropAction(Qt.DropAction.CopyAction)
+            elif event.mimeData().hasFormat("application/x-fat12-item"):
+                event.setDropAction(Qt.DropAction.MoveAction)
+            else:
+                event.setDropAction(Qt.DropAction.CopyAction)
+            event.accept()
         else:
             super().dragMoveEvent(event)
 
@@ -941,6 +948,9 @@ class FileTreeWidget(QTreeWidget):
                 # Check for internal drag
                 is_internal = event.mimeData().hasFormat("application/x-fat12-item")
                 
+                # Check for Copy modifier (Ctrl key)
+                is_copy = (event.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier) != 0
+                
                 # Determine target directory
                 target_item = self.itemAt(event.position().toPoint())
                 parent_cluster = None
@@ -955,7 +965,7 @@ class FileTreeWidget(QTreeWidget):
                             if parent_cluster == 0: parent_cluster = None
                 
                 entries_to_delete = []
-                if is_internal:
+                if is_internal and not is_copy:
                     # Check if moving to same folder
                     source_items = self.selectedItems()
                     if source_items:
@@ -978,7 +988,7 @@ class FileTreeWidget(QTreeWidget):
                 success_count = main_window.add_files_from_list(files, parent_cluster)
 
                 # Handle Move (Delete source) if internal and copy was successful
-                if is_internal and success_count == len(files):
+                if is_internal and not is_copy and success_count == len(files):
                     deleted_count = 0
                     for entry in entries_to_delete:
                         if main_window.image.delete_file(entry):
@@ -986,6 +996,8 @@ class FileTreeWidget(QTreeWidget):
                     
                     main_window.refresh_file_list()
                     main_window.status_bar.showMessage(f"Moved {deleted_count} file(s)")
+                elif is_internal and is_copy and success_count > 0:
+                    main_window.status_bar.showMessage(f"Copied {success_count} file(s)")
         else:
             super().dropEvent(event)
 

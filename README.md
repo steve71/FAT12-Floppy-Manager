@@ -71,6 +71,7 @@ dist\FAT12 Floppy Manager.exe
 - **Directory Support** - Create, rename, and delete folders; navigate subdirectories
 - **File Attributes** - View and edit file attributes (Read-only, Hidden, System, Archive)
 - **Add files** - Drag any files or add file(s) with "Add Files" button
+- **Drag and Drop** - Move files between folders, or hold **Ctrl** to copy
 - **Rename files** - Windows-style inline editing (F2)
 - **Delete files** - Delete selected files or all files (Del/Backspace key)
 - **Extract files** - Extract selected files, all files, drag to extract, or export all to a ZIP archive
