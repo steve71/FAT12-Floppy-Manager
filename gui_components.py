@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QStyledItemDelegate, QLineEdit, QComboBox,
     QRadioButton, QDialogButtonBox, QMessageBox
 )
-from PySide6.QtCore import Qt, QSize, QTimer, QMimeData, QUrl
+from PySide6.QtCore import Qt, QSize, QTimer, QMimeData, QUrl, QSettings
 from PySide6.QtGui import QColor, QPalette, QDrag
 
 # Import the FAT12 handler
@@ -351,7 +351,6 @@ class FATViewer(QDialog):
         self.cluster_to_file = {}  # Map cluster number to filename
         
         # Load settings
-        from PySide6.QtCore import QSettings
         self.settings = QSettings('FAT12FloppyManager', 'Settings')
         
         self.setup_ui()
@@ -1066,7 +1065,9 @@ class NewImageDialog(QDialog):
         self.formats = formats
         self.display_names = display_names
         self.selected_format = formats[0] if formats else '1.44M'
-        self.oem_name = "MSDOS5.0"
+        
+        self.settings = QSettings('FAT12FloppyManager', 'Settings')
+        self.oem_name = self.settings.value('last_oem_name', "MSDOS5.0", type=str)
         self.setup_ui()
 
     def setup_ui(self):
@@ -1110,5 +1111,6 @@ class NewImageDialog(QDialog):
             return
             
         self.oem_name = name
+        self.settings.setValue('last_oem_name', self.oem_name)
         self.selected_format = self.formats[self.format_combo.currentIndex()]
         self.accept()
