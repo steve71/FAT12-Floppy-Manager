@@ -1761,7 +1761,7 @@ class FloppyManagerWindow(QMainWindow):
             attrs = dialog.get_attributes()
             
             # Update the attributes
-            success = self.image.set_file_attributes(
+            success = self.image.set_entry_attributes(
                 entry,
                 is_read_only=attrs['is_read_only'],
                 is_hidden=attrs['is_hidden'],
@@ -1833,7 +1833,7 @@ class FloppyManagerWindow(QMainWindow):
                 return
             
             # Attempt the rename
-            success = self.image.rename_file(entry, new_name, self.use_numeric_tail)
+            success = self.image.rename_entry(entry, new_name, self.use_numeric_tail)
             
             if success:
                 self.status_bar.showMessage(f"Renamed '{old_name}' to '{new_name}'")

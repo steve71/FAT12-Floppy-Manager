@@ -24,9 +24,9 @@ from fat12_directory import (
     read_directory, get_existing_83_names_in_directory,
     find_free_directory_entries, write_directory_entries,
     create_directory, delete_directory, delete_directory_entry,
-    get_entry_offset, predict_short_name, rename_file,
+    get_entry_offset, predict_short_name, rename_entry,
     read_raw_directory_entries, find_free_root_entries, delete_file,
-    find_entry_by_83_name, set_file_attributes
+    find_entry_by_83_name, set_entry_attributes
 )
 
 class FAT12Image:
@@ -513,11 +513,11 @@ class FAT12Image:
         """
         return find_free_root_entries(self, required_slots)
 
-    def rename_file(self, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
+    def rename_entry(self, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
         """
         Rename a file, updating 8.3 name, LFN entries, and handling directory slot reallocation.
         """
-        return rename_file(self, entry, new_name, use_numeric_tail)
+        return rename_entry(self, entry, new_name, use_numeric_tail)
 
     def delete_file(self, entry: dict) -> bool:
         """Delete a file from the image (including LFN entries)"""
@@ -641,7 +641,7 @@ class FAT12Image:
                 f.write(fat_data)
     
 
-    def set_file_attributes(self, entry: dict, is_read_only: bool = None, 
+    def set_entry_attributes(self, entry: dict, is_read_only: bool = None, 
                            is_hidden: bool = None, is_system: bool = None, 
                            is_archive: bool = None) -> bool:
         """
@@ -657,7 +657,7 @@ class FAT12Image:
         Returns:
             True if successful, False otherwise
         """
-        return set_file_attributes(self, entry, is_read_only, is_hidden, is_system, is_archive)
+        return set_entry_attributes(self, entry, is_read_only, is_hidden, is_system, is_archive)
 
     def format_disk(self, full_format: bool = False):
         """Format the disk - erase all files and reset FAT to clean state

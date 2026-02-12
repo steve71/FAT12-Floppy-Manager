@@ -30,7 +30,7 @@ def test_set_read_only_attribute():
         assert entry['attributes'] == 0x20, "Archive bit only should be set"
         
         # Set read-only
-        assert handler.set_file_attributes(entry, is_read_only=True), "Failed to set read-only"
+        assert handler.set_entry_attributes(entry, is_read_only=True), "Failed to set read-only"
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -40,7 +40,7 @@ def test_set_read_only_attribute():
         assert entry['attributes'] & 0x20, "Archive bit should still be set"
         
         # Clear read-only
-        assert handler.set_file_attributes(entry, is_read_only=False), "Failed to clear read-only"
+        assert handler.set_entry_attributes(entry, is_read_only=False), "Failed to clear read-only"
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -70,7 +70,7 @@ def test_set_hidden_attribute():
         assert not entry['is_hidden'], "File should not be hidden initially"
         
         # Set hidden
-        assert handler.set_file_attributes(entry, is_hidden=True), "Failed to set hidden"
+        assert handler.set_entry_attributes(entry, is_hidden=True), "Failed to set hidden"
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -79,7 +79,7 @@ def test_set_hidden_attribute():
         assert entry['attributes'] & 0x02, "Hidden bit should be set"
         
         # Clear hidden
-        assert handler.set_file_attributes(entry, is_hidden=False), "Failed to clear hidden"
+        assert handler.set_entry_attributes(entry, is_hidden=False), "Failed to clear hidden"
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -105,7 +105,7 @@ def test_set_multiple_attributes():
         entry = next(e for e in entries if e['name'] == "MULTI.TXT")
         
         # Set multiple attributes at once
-        result = handler.set_file_attributes(
+        result = handler.set_entry_attributes(
             entry, 
             is_read_only=True, 
             is_hidden=True, 
@@ -143,12 +143,12 @@ def test_partial_attribute_update():
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
         
         # Set read-only and hidden
-        assert handler.set_file_attributes(entry, is_read_only=True, is_hidden=True), "Failed to set attributes"
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True), "Failed to set attributes"
         
         # Now only change archive, leaving read-only and hidden alone
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
-        assert handler.set_file_attributes(entry, is_archive=False), "Failed to clear archive"
+        assert handler.set_entry_attributes(entry, is_archive=False), "Failed to clear archive"
         
         # Verify read-only and hidden are still set, but archive is cleared
         entries = handler.read_root_directory()
@@ -177,7 +177,7 @@ def test_attributes_with_long_filename():
         entry = next(e for e in entries if e['name'] == long_name)
         
         # Set attributes
-        assert handler.set_file_attributes(entry, is_read_only=True, is_hidden=True), "Failed to set attributes"
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True), "Failed to set attributes"
         
         # Verify attributes are set correctly
         entries = handler.read_root_directory()

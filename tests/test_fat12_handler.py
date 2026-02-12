@@ -377,7 +377,7 @@ class TestDirectoryOperations:
         handler.write_file_to_image("old_name.txt", b"content")
         entries = handler.read_root_directory()
         
-        assert handler.rename_file(entries[0], "new_name.txt")
+        assert handler.rename_entry(entries[0], "new_name.txt")
         
         entries_new = handler.read_root_directory()
         assert len(entries_new) == 1
@@ -396,7 +396,7 @@ class TestDirectoryOperations:
         
         # Rename to Long Name
         long_name = "ThisIsAVeryLongName.txt"
-        handler.rename_file(entries[0], long_name, use_numeric_tail=True)
+        handler.rename_entry(entries[0], long_name, use_numeric_tail=True)
         
         entries = handler.read_root_directory()
         assert entries[0]['name'] == long_name
@@ -416,7 +416,7 @@ class TestDirectoryOperations:
         
         # Rename to Short Name
         new_name = "SHORT.TXT"
-        handler.rename_file(entries[0], new_name)
+        handler.rename_entry(entries[0], new_name)
         
         entries_new = handler.read_root_directory()
         assert len(entries_new) == 1
@@ -446,7 +446,7 @@ class TestDirectoryOperations:
         last_file_entry = entries[-1]
         
         # Try to rename to a long name, which requires more than one slot. This should fail.
-        assert not handler.rename_file(last_file_entry, "ThisIsALongName.txt")
+        assert not handler.rename_entry(last_file_entry, "ThisIsALongName.txt")
 
     def test_lfn_case_preservation(self, tmp_path):
         img_path = tmp_path / "test_case.img"
@@ -471,7 +471,7 @@ class TestDirectoryOperations:
         
         # Mock generate_83_name to return a non-ascii string to trigger UnicodeEncodeError
         with patch('fat12_directory.generate_83_name', return_value="FÏLE    TXT"):
-            handler.rename_file(entries[0], "new.txt")
+            handler.rename_entry(entries[0], "new.txt")
             
         entries = handler.read_root_directory()
         # 'Ï' is dropped by 'ignore', resulting in "FLE    TXT " (padded)
@@ -486,7 +486,7 @@ class TestDirectoryOperations:
         
         # Mock open to raise exception during rename
         with patch('builtins.open', side_effect=IOError("Mock error")):
-            result = handler.rename_file(entries[0], "new.txt")
+            result = handler.rename_entry(entries[0], "new.txt")
             assert result is False
 
     def test_lfn_cleanup_on_delete(self, tmp_path):
@@ -621,7 +621,7 @@ class TestDirectoryOperations:
         
         # Rename "FILE.TXT" to "File.txt"
         # Should result in "FILE.TXT" short name (no ~1) and "File.txt" long name
-        handler.rename_file(entries[0], "File.txt")
+        handler.rename_entry(entries[0], "File.txt")
         
         entries = handler.read_root_directory()
         assert entries[0]['name'] == "File.txt"
@@ -1077,7 +1077,7 @@ class TestFileAttributes:
         assert entry['attributes'] == 0x20  # Archive bit only
         
         # Set read-only
-        assert handler.set_file_attributes(entry, is_read_only=True)
+        assert handler.set_entry_attributes(entry, is_read_only=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -1087,7 +1087,7 @@ class TestFileAttributes:
         assert entry['attributes'] & 0x20  # Archive bit still set
         
         # Clear read-only
-        assert handler.set_file_attributes(entry, is_read_only=False)
+        assert handler.set_entry_attributes(entry, is_read_only=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -1114,7 +1114,7 @@ class TestFileAttributes:
         assert not entry['is_hidden']
         
         # Set hidden
-        assert handler.set_file_attributes(entry, is_hidden=True)
+        assert handler.set_entry_attributes(entry, is_hidden=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -1123,7 +1123,7 @@ class TestFileAttributes:
         assert entry['attributes'] & 0x02  # Hidden bit set
         
         # Clear hidden
-        assert handler.set_file_attributes(entry, is_hidden=False)
+        assert handler.set_entry_attributes(entry, is_hidden=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -1149,7 +1149,7 @@ class TestFileAttributes:
         assert not entry['is_system']
         
         # Set system
-        assert handler.set_file_attributes(entry, is_system=True)
+        assert handler.set_entry_attributes(entry, is_system=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -1175,7 +1175,7 @@ class TestFileAttributes:
         assert entry['is_archive']
         
         # Clear archive
-        assert handler.set_file_attributes(entry, is_archive=False)
+        assert handler.set_entry_attributes(entry, is_archive=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -1184,7 +1184,7 @@ class TestFileAttributes:
         assert not (entry['attributes'] & 0x20)  # Archive bit cleared
         
         # Set archive again
-        assert handler.set_file_attributes(entry, is_archive=True)
+        assert handler.set_entry_attributes(entry, is_archive=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -1207,7 +1207,7 @@ class TestFileAttributes:
         entry = next(e for e in entries if e['name'] == "MULTI.TXT")
         
         # Set multiple attributes at once
-        assert handler.set_file_attributes(
+        assert handler.set_entry_attributes(
             entry, 
             is_read_only=True, 
             is_hidden=True, 
@@ -1241,12 +1241,12 @@ class TestFileAttributes:
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
         
         # Set read-only and hidden
-        assert handler.set_file_attributes(entry, is_read_only=True, is_hidden=True)
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Now only change archive, leaving read-only and hidden alone
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
-        assert handler.set_file_attributes(entry, is_archive=False)
+        assert handler.set_entry_attributes(entry, is_archive=False)
         
         # Verify read-only and hidden are still set, but archive is cleared
         entries = handler.read_root_directory()
@@ -1275,7 +1275,7 @@ class TestFileAttributes:
         assert not (original_attr & 0x10)  # Should not be a directory
         
         # Try to set various attributes
-        assert handler.set_file_attributes(entry, is_read_only=True, is_hidden=True)
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Verify directory bit is still clear
         entries = handler.read_root_directory()
@@ -1299,7 +1299,18 @@ class TestFileAttributes:
         entry = next(e for e in entries if e['name'] == long_name)
         
         # Set attributes
-        assert handler.set_file_attributes(entry, is_read_only=True, is_hidden=True)
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
+        
+        # Verify attributes are set correctly
+        entries = handler.read_root_directory()
+        entry = next(e for e in entries if e['name'] == long_name)
+        assert entry['is_read_only']
+        assert entry['is_hidden']
+        
+        # Verify the file can still be read correctly
+        assert len(entries) > 0
+        assert entry['name'] == long_name
+        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Verify attributes are set correctly
         entries = handler.read_root_directory()

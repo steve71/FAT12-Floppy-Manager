@@ -737,7 +737,7 @@ def delete_file(fs, entry: dict) -> bool:
         print(f"Error deleting file: {e}")
         return False
 
-def rename_file(fs, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
+def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
     """
     Renames a file or directory, handling both LFN and 8.3 name updates.
 
@@ -916,7 +916,7 @@ def find_entry_by_83_name(fs, target_83_name: str) -> Optional[dict]:
             return entry
     return None
 
-def set_file_attributes(fs, entry: dict, is_read_only: bool = None, 
+def set_entry_attributes(fs, entry: dict, is_read_only: bool = None, 
                        is_hidden: bool = None, is_system: bool = None, 
                        is_archive: bool = None) -> bool:
     """
