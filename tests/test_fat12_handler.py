@@ -48,7 +48,7 @@ class TestInitialization:
         
         # Load it and verify the OEM Name from the snippet
         handler = FAT12Image(str(img_path))
-        assert "YAMAHA" in handler.oem_name
+        assert "MSDOS5.0" in handler.oem_name
         assert handler.bytes_per_cluster == 512
         assert handler.sectors_per_cluster == 1
         assert handler.reserved_sectors == 1

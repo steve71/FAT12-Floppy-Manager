@@ -24,7 +24,9 @@ from fat12_directory import (
     read_directory, get_existing_83_names_in_directory,
     find_free_directory_entries, write_directory_entries,
     create_directory, delete_directory, delete_directory_entry,
-    get_entry_offset, predict_short_name, rename_file
+    get_entry_offset, predict_short_name, rename_file,
+    read_raw_directory_entries, find_free_root_entries, delete_file,
+    find_entry_by_83_name, set_file_attributes
 )
 
 class FAT12Image:
@@ -204,16 +206,7 @@ class FAT12Image:
 
     def find_entry_by_83_name(self, target_83_name: str) -> Optional[dict]:
         """Find a directory entry by its 11-character 8.3 name (no dot)"""
-        # target_83_name should be 11 chars, space padded, uppercase
-        target = target_83_name.upper().ljust(11)[:11]
-        
-        entries = self.read_root_directory()
-        for entry in entries:
-            # Compare against the raw 11-byte name stored in the entry
-            raw_name = entry.get('raw_short_name')
-            if raw_name and raw_name.upper() == target:
-                return entry
-        return None
+        return find_entry_by_83_name(self, target_83_name)
 
     def read_fat(self) -> bytearray:
         """Read the FAT table"""
@@ -263,15 +256,7 @@ class FAT12Image:
     
     def read_raw_directory_entries(self):
         """Read all raw directory entries from disk"""
-        raw_entries = []
-        with open(self.image_path, 'rb') as f:
-            f.seek(self.root_start)
-            for i in range(self.root_entries):
-                entry_data = f.read(32)
-                raw_entries.append((i, entry_data))
-                if entry_data[0] == 0x00:  # End of directory
-                    break
-        return raw_entries
+        return read_raw_directory_entries(self)
     
     def find_free_clusters(self, count: int = None) -> List[int]:
         """Find free clusters in the FAT. If count is None, find all."""
@@ -526,27 +511,7 @@ class FAT12Image:
         Find a contiguous block of free root directory entries.
         Returns the starting index, or -1 if no space is found.
         """
-        with open(self.image_path, 'rb') as f:
-            f.seek(self.root_start)
-            consecutive = 0
-            start_index = -1
-
-            for i in range(self.root_entries):
-                data = f.read(32)
-                # Check for End of Dir (0x00) or Deleted (0xE5)
-                if data[0] == 0x00 or data[0] == 0xE5:
-                    if consecutive == 0:
-                        start_index = i
-                    consecutive += 1
-
-                    if consecutive >= required_slots:
-                        return start_index
-                else:
-                    # Reset counter if we hit an occupied slot
-                    consecutive = 0
-                    start_index = -1
-
-        return -1
+        return find_free_root_entries(self, required_slots)
 
     def rename_file(self, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
         """
@@ -556,27 +521,7 @@ class FAT12Image:
 
     def delete_file(self, entry: dict) -> bool:
         """Delete a file from the image (including LFN entries)"""
-        try:
-            # Mark entry as deleted
-            if not delete_directory_entry(self, entry.get('parent_cluster'), entry['index']):
-                return False
-            
-            # Free clusters in FAT
-            if entry['cluster'] >= 2:
-                fat_data = self.read_fat()
-                current_cluster = entry['cluster']
-                
-                while current_cluster < 0xFF8:
-                    next_cluster = self.get_fat_entry(fat_data, current_cluster)
-                    self.set_fat_entry(fat_data, current_cluster, 0)
-                    current_cluster = next_cluster
-                
-                self.write_fat(fat_data)
-            
-            return True
-        except Exception as e:
-            print(f"Error deleting file: {e}")
-            return False
+        return delete_file(self, entry)
     
     def delete_directory(self, entry: dict, recursive: bool = False) -> bool:
         """Delete a directory
@@ -712,59 +657,7 @@ class FAT12Image:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            # Start with current attributes
-            current_attr = entry['attributes']
-            new_attr = current_attr
-            
-            # Modify flags as requested (only if not None)
-            if is_read_only is not None:
-                if is_read_only:
-                    new_attr |= 0x01  # Set read-only bit
-                else:
-                    new_attr &= ~0x01  # Clear read-only bit
-            
-            if is_hidden is not None:
-                if is_hidden:
-                    new_attr |= 0x02  # Set hidden bit
-                else:
-                    new_attr &= ~0x02  # Clear hidden bit
-            
-            if is_system is not None:
-                if is_system:
-                    new_attr |= 0x04  # Set system bit
-                else:
-                    new_attr &= ~0x04  # Clear system bit
-            
-            if is_archive is not None:
-                if is_archive:
-                    new_attr |= 0x20  # Set archive bit
-                else:
-                    new_attr &= ~0x20  # Clear archive bit
-            
-            # Preserve directory bit (0x10) - can't change this
-            # Preserve volume label bit (0x08) - can't change this
-            # These are structural attributes, not user-modifiable
-            
-            # Write the new attribute byte to disk
-            with open(self.image_path, 'r+b') as f:
-                # Get the physical offset of the directory entry
-                parent_cluster = entry.get('parent_cluster')
-                
-                offset = get_entry_offset(self, parent_cluster, entry['index'])
-                if offset == -1:
-                    print(f"Error: Could not find offset for entry {entry['name']}")
-                    return False
-                
-                # Attribute byte is at offset 11 in the directory entry
-                f.seek(offset + DIR_ATTR_OFFSET)
-                f.write(bytes([new_attr]))
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error setting file attributes: {e}")
-            return False
+        return set_file_attributes(self, entry, is_read_only, is_hidden, is_system, is_archive)
 
     def format_disk(self, full_format: bool = False):
         """Format the disk - erase all files and reset FAT to clean state

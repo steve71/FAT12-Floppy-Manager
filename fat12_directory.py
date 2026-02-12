@@ -245,6 +245,18 @@ def get_existing_83_names_in_directory(fs, cluster: int = None) -> List[str]:
         names.append(decode_raw_83_name(entry_data).upper())
     return names
 
+def read_raw_directory_entries(fs):
+    """Read all raw directory entries from disk"""
+    raw_entries = []
+    with open(fs.image_path, 'rb') as f:
+        f.seek(fs.root_start)
+        for i in range(fs.root_entries):
+            entry_data = f.read(32)
+            raw_entries.append((i, entry_data))
+            if entry_data[0] == 0x00:  # End of directory
+                break
+    return raw_entries
+
 def find_free_directory_entries(fs, cluster: int = None, required_slots: int = 1) -> int:
     """
     Finds a contiguous block of free directory entries.
@@ -340,6 +352,33 @@ def find_free_directory_entries(fs, cluster: int = None, required_slots: int = 1
     fs.write_fat(fat_data)
     
     return start_index
+
+def find_free_root_entries(fs, required_slots: int) -> int:
+    """
+    Find a contiguous block of free root directory entries.
+    Returns the starting index, or -1 if no space is found.
+    """
+    with open(fs.image_path, 'rb') as f:
+        f.seek(fs.root_start)
+        consecutive = 0
+        start_index = -1
+
+        for i in range(fs.root_entries):
+            data = f.read(32)
+            # Check for End of Dir (0x00) or Deleted (0xE5)
+            if data[0] == 0x00 or data[0] == 0xE5:
+                if consecutive == 0:
+                    start_index = i
+                consecutive += 1
+
+                if consecutive >= required_slots:
+                    return start_index
+            else:
+                # Reset counter if we hit an occupied slot
+                consecutive = 0
+                start_index = -1
+
+    return -1
 
 def get_entry_offset(fs, parent_cluster: int, index: int, fat_data: bytearray = None) -> int:
     """
@@ -649,7 +688,7 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
                     if not delete_directory(fs, sub_entry, recursive=True):
                         return False
                 else:
-                    if not fs.delete_file(sub_entry):
+                    if not delete_file(fs, sub_entry):
                         return False
         
         # Free the directory's clusters
@@ -672,6 +711,30 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
         print(f"Error deleting directory: {e}")
         import traceback
         traceback.print_exc()
+        return False
+
+def delete_file(fs, entry: dict) -> bool:
+    """Delete a file from the image (including LFN entries)"""
+    try:
+        # Mark entry as deleted
+        if not delete_directory_entry(fs, entry.get('parent_cluster'), entry['index']):
+            return False
+        
+        # Free clusters in FAT
+        if entry['cluster'] >= 2:
+            fat_data = fs.read_fat()
+            current_cluster = entry['cluster']
+            
+            while current_cluster < 0xFF8:
+                next_cluster = fs.get_fat_entry(fat_data, current_cluster)
+                fs.set_fat_entry(fat_data, current_cluster, 0)
+                current_cluster = next_cluster
+            
+            fs.write_fat(fat_data)
+        
+        return True
+    except Exception as e:
+        print(f"Error deleting file: {e}")
         return False
 
 def rename_file(fs, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
@@ -839,3 +902,67 @@ def predict_short_name(fs, long_name: str, use_numeric_tail: bool = False, paren
     """
     existing_names = get_existing_83_names_in_directory(fs, parent_cluster)
     return generate_83_name(long_name, existing_names, use_numeric_tail)
+
+def find_entry_by_83_name(fs, target_83_name: str) -> Optional[dict]:
+    """Find a directory entry by its 11-character 8.3 name (no dot)"""
+    # target_83_name should be 11 chars, space padded, uppercase
+    target = target_83_name.upper().ljust(11)[:11]
+    
+    entries = read_directory(fs, None)
+    for entry in entries:
+        # Compare against the raw 11-byte name stored in the entry
+        raw_name = entry.get('raw_short_name')
+        if raw_name and raw_name.upper() == target:
+            return entry
+    return None
+
+def set_file_attributes(fs, entry: dict, is_read_only: bool = None, 
+                       is_hidden: bool = None, is_system: bool = None, 
+                       is_archive: bool = None) -> bool:
+    """
+    Modify file attributes for a directory entry.
+    
+    Args:
+        fs: The FAT12Image filesystem object.
+        entry: Directory entry dictionary (must contain 'index' and 'attributes')
+        is_read_only: Set read-only flag (None = no change)
+        is_hidden: Set hidden flag (None = no change)
+        is_system: Set system flag (None = no change)
+        is_archive: Set archive flag (None = no change)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Start with current attributes
+        current_attr = entry['attributes']
+        new_attr = current_attr
+        
+        # Modify flags as requested (only if not None)
+        if is_read_only is not None:
+            if is_read_only: new_attr |= 0x01
+            else: new_attr &= ~0x01
+        if is_hidden is not None:
+            if is_hidden: new_attr |= 0x02
+            else: new_attr &= ~0x02
+        if is_system is not None:
+            if is_system: new_attr |= 0x04
+            else: new_attr &= ~0x04
+        if is_archive is not None:
+            if is_archive: new_attr |= 0x20
+            else: new_attr &= ~0x20
+        
+        # Write the new attribute byte to disk
+        with open(fs.image_path, 'r+b') as f:
+            parent_cluster = entry.get('parent_cluster')
+            offset = get_entry_offset(fs, parent_cluster, entry['index'])
+            if offset == -1:
+                print(f"Error: Could not find offset for entry {entry['name']}")
+                return False
+            
+            f.seek(offset + DIR_ATTR_OFFSET)
+            f.write(bytes([new_attr]))
+        return True
+    except Exception as e:
+        print(f"Error setting file attributes: {e}")
+        return False
