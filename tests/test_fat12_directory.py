@@ -2,7 +2,8 @@ import pytest
 from fat12_handler import FAT12Image
 from fat12_directory import (
     iter_directory_entries, get_entry_offset, 
-    get_existing_83_names_in_directory, find_free_directory_entries
+    get_existing_83_names_in_directory, find_free_directory_entries,
+    free_cluster_chain
 )
 
 @pytest.fixture
@@ -208,3 +209,63 @@ class TestDirectoryInternals:
         # Verify the directory actually grew (chain length check)
         chain = image.get_cluster_chain(sub['cluster'])
         assert len(chain) == 2
+
+class TestFreeClusterChain:
+    def test_free_simple_chain(self, image):
+        """Test freeing a simple contiguous chain"""
+        # 2 -> 3 -> EOF
+        fat = image.read_fat()
+        image.set_fat_entry(fat, 2, 3)
+        image.set_fat_entry(fat, 3, 0xFFF)
+        image.write_fat(fat)
+        
+        free_cluster_chain(image, 2)
+        
+        fat = image.read_fat()
+        assert image.get_fat_entry(fat, 2) == 0
+        assert image.get_fat_entry(fat, 3) == 0
+
+    def test_free_single_cluster(self, image):
+        """Test freeing a single cluster"""
+        # 5 -> EOF
+        fat = image.read_fat()
+        image.set_fat_entry(fat, 5, 0xFFF)
+        image.write_fat(fat)
+        
+        free_cluster_chain(image, 5)
+        
+        fat = image.read_fat()
+        assert image.get_fat_entry(fat, 5) == 0
+
+    def test_free_fragmented_chain(self, image):
+        """Test freeing a non-contiguous chain"""
+        # 2 -> 10 -> 5 -> EOF
+        fat = image.read_fat()
+        image.set_fat_entry(fat, 2, 10)
+        image.set_fat_entry(fat, 10, 5)
+        image.set_fat_entry(fat, 5, 0xFFF)
+        image.write_fat(fat)
+        
+        free_cluster_chain(image, 2)
+        
+        fat = image.read_fat()
+        assert image.get_fat_entry(fat, 2) == 0
+        assert image.get_fat_entry(fat, 10) == 0
+        assert image.get_fat_entry(fat, 5) == 0
+
+    def test_ignore_reserved_clusters(self, image):
+        """Test that it ignores start_cluster < 2"""
+        # Setup cluster 2 as used
+        fat = image.read_fat()
+        image.set_fat_entry(fat, 2, 0xFFF)
+        image.write_fat(fat)
+        
+        # Try to free 0 and 1
+        free_cluster_chain(image, 0)
+        free_cluster_chain(image, 1)
+        
+        # Verify 2 is still used (indirect check that nothing weird happened)
+        fat = image.read_fat()
+        assert image.get_fat_entry(fat, 2) == 0xFFF
+        # Verify 0 and 1 are unchanged (usually F0 FF FF for 1.44MB)
+        assert fat[0] == 0xF0

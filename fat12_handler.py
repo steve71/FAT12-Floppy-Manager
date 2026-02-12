@@ -25,7 +25,7 @@ from fat12_directory import (
     find_free_directory_entries, write_directory_entries,
     create_directory, delete_directory, delete_directory_entry,
     get_entry_offset, predict_short_name, rename_entry,
-    read_raw_directory_entries, find_free_root_entries, delete_file,
+    read_raw_directory_entries, find_free_root_entries, delete_entry,
     find_entry_by_83_name, set_entry_attributes
 )
 
@@ -521,7 +521,7 @@ class FAT12Image:
 
     def delete_file(self, entry: dict) -> bool:
         """Delete a file from the image (including LFN entries)"""
-        return delete_file(self, entry)
+        return delete_entry(self, entry)
     
     def delete_directory(self, entry: dict, recursive: bool = False) -> bool:
         """Delete a directory

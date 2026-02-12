@@ -648,6 +648,21 @@ def delete_directory_entry(fs, parent_cluster: int, entry_index: int) -> bool:
         print(f"Error deleting directory entry: {e}")
         return False
 
+def free_cluster_chain(fs, start_cluster: int):
+    """Frees a chain of clusters starting from start_cluster."""
+    if start_cluster < 2:
+        return
+        
+    fat_data = fs.read_fat()
+    current_cluster = start_cluster
+    
+    while current_cluster < 0xFF8:
+        next_cluster = fs.get_fat_entry(fat_data, current_cluster)
+        fs.set_fat_entry(fat_data, current_cluster, 0)
+        current_cluster = next_cluster
+    
+    fs.write_fat(fat_data)
+
 def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
     """
     Deletes a directory.
@@ -688,24 +703,11 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
                     if not delete_directory(fs, sub_entry, recursive=True):
                         return False
                 else:
-                    if not delete_file(fs, sub_entry):
+                    if not delete_entry(fs, sub_entry):
                         return False
         
-        # Free the directory's clusters
-        if entry['cluster'] >= 2:
-            fat_data = fs.read_fat()
-            current_cluster = entry['cluster']
-            
-            while current_cluster < 0xFF8:
-                next_cluster = fs.get_fat_entry(fat_data, current_cluster)
-                fs.set_fat_entry(fat_data, current_cluster, 0)
-                current_cluster = next_cluster
-            
-            fs.write_fat(fat_data)
-        
-        # Delete the directory entry itself
-        parent_cluster = entry.get('parent_cluster')
-        return delete_directory_entry(fs, parent_cluster, entry['index'])
+        # Delete the directory entry itself and free clusters
+        return delete_entry(fs, entry)
         
     except Exception as e:
         print(f"Error deleting directory: {e}")
@@ -713,28 +715,19 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
         traceback.print_exc()
         return False
 
-def delete_file(fs, entry: dict) -> bool:
-    """Delete a file from the image (including LFN entries)"""
+def delete_entry(fs, entry: dict) -> bool:
+    """Delete a directory entry (file or directory) and free its clusters"""
     try:
         # Mark entry as deleted
         if not delete_directory_entry(fs, entry.get('parent_cluster'), entry['index']):
             return False
         
         # Free clusters in FAT
-        if entry['cluster'] >= 2:
-            fat_data = fs.read_fat()
-            current_cluster = entry['cluster']
-            
-            while current_cluster < 0xFF8:
-                next_cluster = fs.get_fat_entry(fat_data, current_cluster)
-                fs.set_fat_entry(fat_data, current_cluster, 0)
-                current_cluster = next_cluster
-            
-            fs.write_fat(fat_data)
+        free_cluster_chain(fs, entry['cluster'])
         
         return True
     except Exception as e:
-        print(f"Error deleting file: {e}")
+        print(f"Error deleting entry: {e}")
         return False
 
 def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
