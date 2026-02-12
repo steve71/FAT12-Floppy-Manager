@@ -35,6 +35,7 @@ from gui_components import (
     SortableTreeWidgetItem, FileTreeWidget, RenameDelegate, FormatDialog,
     NewImageDialog
 )
+from file_icons import FileIconProvider
 
 from PySide6.QtWidgets import QLineEdit
 
@@ -564,6 +565,13 @@ class FloppyManagerWindow(QMainWindow):
             
             # Update toolbar for light mode
             self.update_toolbar_style('light')
+            
+        # Update icon provider with current style
+        self.icon_provider = FileIconProvider(self.style())
+        
+        # Refresh file list to update icons if image is loaded
+        if hasattr(self, 'image') and self.image:
+             self.refresh_file_list()
     
     def update_toolbar_style(self, theme_mode):
         """Update toolbar styling based on theme"""
@@ -889,11 +897,11 @@ class FloppyManagerWindow(QMainWindow):
                         item.setTextAlignment(5, Qt.AlignmentFlag.AlignCenter)
 
                         # Icon & Recursion
+                        item.setIcon(0, self.icon_provider.get_icon(entry))
+                        
                         if entry['is_dir']:
-                            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_DirIcon))
                             stack.append((item, entry['cluster']))
                         else:
-                            item.setIcon(0, self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
                             file_count += 1
 
                 self.info_label.setText(f"{file_count} files | {self.image.get_free_space():,} bytes free")
