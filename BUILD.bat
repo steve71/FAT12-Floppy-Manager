@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-REM Floppy Manager
+REM FloppyManager
 
 echo.
 echo =============================

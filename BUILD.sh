@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Floppy Manager Build Script for Linux
+# FloppyManager Build Script for Linux
 
 # Ensure we are in the script's directory
 cd "$(dirname "$0")"

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Floppy Manager Build Script for macOS
+# FloppyManager Build Script for macOS
 # This is a .command file which can be double-clicked in Finder
 
 # Ensure we are in the script's directory

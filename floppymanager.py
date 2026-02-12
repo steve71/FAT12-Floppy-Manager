@@ -4,7 +4,7 @@
 # MIT License
 
 """
-FAT12 Floppy Disk Image Manager
+FAT12 FloppyManager
 A modern GUI tool for managing files on FAT12 floppy disk images with VFAT LFN support
 """
 
