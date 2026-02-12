@@ -100,6 +100,18 @@ class FAT12Image:
             'sectors_per_fat': 2,
             'reserved_sectors': 1,
             'hidden_sectors': 0
+        },
+        '32M': {
+            'name': 'Experimental 32MB (FAT12 Max)',
+            'total_sectors': 65344,
+            'sectors_per_cluster': 16,
+            'sectors_per_track': 32,
+            'heads': 2,
+            'root_entries': 512,
+            'media_descriptor': 0xF0,
+            'sectors_per_fat': 12,
+            'reserved_sectors': 1,
+            'hidden_sectors': 0
         }
     }
 
@@ -604,15 +616,19 @@ class FAT12Image:
             boot_sector[14:16] = reserved_sectors.to_bytes(2, 'little')
             boot_sector[16] = num_fats
             boot_sector[17:19] = root_entries.to_bytes(2, 'little')
-            boot_sector[19:21] = total_sectors.to_bytes(2, 'little')
+            
+            if total_sectors < 65536:
+                boot_sector[19:21] = total_sectors.to_bytes(2, 'little')
+                boot_sector[32:36] = (0).to_bytes(4, 'little')
+            else:
+                boot_sector[19:21] = (0).to_bytes(2, 'little')
+                boot_sector[32:36] = total_sectors.to_bytes(4, 'little')
+
             boot_sector[21] = media_descriptor
             boot_sector[22:24] = sectors_per_fat.to_bytes(2, 'little')
             boot_sector[24:26] = sectors_per_track.to_bytes(2, 'little')
             boot_sector[26:28] = heads.to_bytes(2, 'little')
             boot_sector[28:32] = hidden_sectors.to_bytes(4, 'little')
-            
-            # Total Sectors 32-bit (0 for all standard floppy formats)
-            boot_sector[32:36] = (0).to_bytes(4, 'little')
             
             # Extended BPB
             boot_sector[36] = 0x00 # Drive number
