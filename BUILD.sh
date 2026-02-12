@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# FAT12 Floppy Manager Build Script for Linux
+# Floppy Manager Build Script for Linux
 
 # Ensure we are in the script's directory
 cd "$(dirname "$0")"
 
 echo ""
 echo "============================="
-echo "  FAT12 Floppy Manager"
+echo "  Floppy Manager"
 echo "============================="
 echo ""
 
@@ -65,27 +65,20 @@ echo ""
 rm -rf build dist *.spec
 
 # Run PyInstaller
-# Note: Using ':' as separator for --add-data on Linux
-python3 -m PyInstaller --clean --noconfirm \
-    --name "FAT12_Floppy_Manager" \
-    --onefile \
-    --windowed \
-    --icon=floppy_icon.ico \
-    --add-data "floppy_icon.ico:." \
-    fat12_floppy_manager.py
+python3 -m PyInstaller --clean --noconfirm Floppy_Manager.spec
 
 echo ""
 # Check if build succeeded
-if [ -f "dist/FAT12_Floppy_Manager" ]; then
+if [ -f "dist/Floppy_Manager" ]; then
     echo "================================================================"
     echo "  SUCCESS - Build Complete!"
     echo "================================================================"
     echo ""
     echo "  Your executable is ready!"
-    echo "  Location: dist/FAT12_Floppy_Manager"
+    echo "  Location: dist/Floppy_Manager"
     echo ""
     echo "  To run:"
-    echo "  ./dist/FAT12_Floppy_Manager"
+    echo "  ./dist/Floppy_Manager"
     echo ""
 else
     echo "================================================================"

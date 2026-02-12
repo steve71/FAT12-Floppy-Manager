@@ -1,4 +1,4 @@
-# FAT12 Floppy Manager
+# Floppy Manager
 
 ## Python PySide6 GUI for managing FAT12 floppy disk images
 
@@ -46,13 +46,7 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
    - Double-click `BUILD.bat`
    - Or run in Command Prompt:
      ```cmd
-     python -m PyInstaller --clean --noconfirm ^
-         --name "FAT12 Floppy Manager" ^
-         --onefile ^
-         --windowed ^
-         --icon=floppy_icon.ico ^
-         --add-data "floppy_icon.ico;." ^
-         fat12_floppy_manager.py
+     python -m PyInstaller --clean --noconfirm Floppy_Manager.spec
      ```
 
    *Note: The executable will be in the `dist` folder.*
@@ -71,13 +65,7 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
 
 3. **Build Application**
    ```bash
-   python3 -m PyInstaller --clean --noconfirm \
-       --name "FAT12 Floppy Manager" \
-       --onefile \
-       --windowed \
-       --icon=floppy_icon.ico \
-       --add-data "floppy_icon.ico:." \
-       fat12_floppy_manager.py
+   python3 -m PyInstaller --clean --noconfirm Floppy_Manager.spec
    ```
 
 ### macOS Build Instructions
@@ -151,11 +139,12 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
 ## What's Included
 
 **Essential Files:**
-- `fat12_floppy_manager.py` - Main application (PySide6)
+- `floppy_manager.py` - Main application (PySide6)
 - `fat12_handler.py` - FAT12 filesystem handler
 - `gui_components.py` - GUI dialogs and viewers
 - `vfat_utils.py` - VFAT/LFN utilities
 - `floppy_icon.ico` - Application icon
+- `Floppy_Manager.spec` - PyInstaller build configuration
 - `BUILD.bat` - Build script
 
 ---
@@ -173,12 +162,12 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
 ## Using the Application
 
 ### Creating a Floppy Image
-1. Run `FAT12 Floppy Manager.exe`
+1. Run `Floppy Manager.exe`
 2. Select File / New Image...
 3. Give it a filename and hit save
 
 ### Opening a Floppy Image
-1. Run `FAT12 Floppy Manager.exe`
+1. Run `Floppy Manager.exe`
 2. Browse to your `.img` file
 3. Start managing files.
 

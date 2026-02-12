@@ -1,10 +1,10 @@
 @echo off
 cd /d "%~dp0"
-REM FAT12 Floppy Manager
+REM Floppy Manager
 
 echo.
 echo =============================
-echo   FAT12 Floppy Manager
+echo   Floppy Manager
 echo =============================
 echo.
 
@@ -67,29 +67,23 @@ echo [3/3] Building executable...
 echo Please wait...
 echo.
 
-python -m PyInstaller --clean --noconfirm ^
-    --name "FAT12 Floppy Manager" ^
-    --onefile ^
-    --windowed ^
-    --icon=floppy_icon.ico ^
-    --add-data "floppy_icon.ico;." ^
-    fat12_floppy_manager.py
+python -m PyInstaller --clean --noconfirm Floppy_Manager.spec
 
 echo.
 REM Check if build succeeded
-if exist "dist\FAT12 Floppy Manager.exe" (
+if exist "dist\Floppy Manager.exe" (
     echo ================================================================
     echo   SUCCESS - Build Complete!
     echo ================================================================
     echo.
     echo   Your executable is ready!
-    echo   Location: dist\FAT12 Floppy Manager.exe
+    echo   Location: dist\Floppy Manager.exe
     echo.
     echo   File size: ~30 MB (includes PySide6 runtime^)
     echo.
     echo   NEXT STEPS:
     echo   1. Open the "dist" folder
-    echo   2. Copy "FAT12 Floppy Manager.exe" to your Desktop
+    echo   2. Copy "Floppy Manager.exe" to your Desktop
     echo   3. Double-click to run
     echo   4. Right-click exe and Create shortcut (optional^)
     echo.

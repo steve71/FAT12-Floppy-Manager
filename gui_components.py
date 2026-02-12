@@ -351,7 +351,7 @@ class FATViewer(QDialog):
         self.cluster_to_file = {}  # Map cluster number to filename
         
         # Load settings
-        self.settings = QSettings('FAT12FloppyManager', 'Settings')
+        self.settings = QSettings('FloppyManager', 'Settings')
         
         self.setup_ui()
         
@@ -1122,7 +1122,7 @@ class NewImageDialog(QDialog):
         self.display_names = display_names
         self.selected_format = formats[0] if formats else '1.44M'
         
-        self.settings = QSettings('FAT12FloppyManager', 'Settings')
+        self.settings = QSettings('FloppyManager', 'Settings')
         self.oem_name = self.settings.value('last_oem_name', "MSDOS5.0", type=str)
         self.setup_ui()
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# FAT12 Floppy Manager Build Script for macOS
+# Floppy Manager Build Script for macOS
 # This is a .command file which can be double-clicked in Finder
 
 # Ensure we are in the script's directory
@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 
 echo ""
 echo "============================="
-echo "  FAT12 Floppy Manager (Mac)"
+echo "  Floppy Manager (Mac)"
 echo "============================="
 echo ""
 
@@ -69,18 +69,11 @@ echo ""
 rm -rf build dist *.spec
 
 # Run PyInstaller
-# Note: Using ':' as separator for --add-data on Unix-like systems
-python3 -m PyInstaller --clean --noconfirm \
-    --name "FAT12_Floppy_Manager" \
-    --onefile \
-    --windowed \
-    --icon=floppy_icon.ico \
-    --add-data "floppy_icon.ico:." \
-    fat12_floppy_manager.py
+python3 -m PyInstaller --clean --noconfirm Floppy_Manager.spec
 
 echo ""
 # Check if build succeeded
-if [ -f "dist/FAT12_Floppy_Manager" ]; then
+if [ -f "dist/Floppy_Manager" ]; then
     echo "SUCCESS! Executable is in the 'dist' folder."
 else
     echo "BUILD FAILED. Check messages above."

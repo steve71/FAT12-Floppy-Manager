@@ -46,7 +46,7 @@ class FloppyManagerWindow(QMainWindow):
         super().__init__()
 
         # Settings
-        self.settings = QSettings('FAT12FloppyManager', 'Settings')
+        self.settings = QSettings('FloppyManager', 'Settings')
         self.confirm_delete = self.settings.value('confirm_delete', True, type=bool)
         self.confirm_replace = self.settings.value('confirm_replace', True, type=bool)
         self.show_hidden_files = self.settings.value('show_hidden_files', True, type=bool)
@@ -97,7 +97,7 @@ class FloppyManagerWindow(QMainWindow):
 
     def setup_ui(self):
         """Create the user interface"""
-        self.setWindowTitle("FAT12 Floppy Manager")
+        self.setWindowTitle("Floppy Manager")
         self.setGeometry(400, 200, 620, 500)
 
         # Set window icon if available
@@ -741,7 +741,7 @@ class FloppyManagerWindow(QMainWindow):
         try:
             self.image = FAT12Image(filepath)
             self.image_path = filepath
-            self.setWindowTitle(f"FAT12 Floppy Manager - {Path(filepath).name}")
+            self.setWindowTitle(f"Floppy Manager - {Path(filepath).name}")
 
             # Save as last opened image
             self.settings.setValue('last_image_path', filepath)
@@ -752,7 +752,7 @@ class FloppyManagerWindow(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to load image: {e}")
             self.image = None
             self.image_path = None
-            self.setWindowTitle("FAT12 Floppy Manager")
+            self.setWindowTitle("Floppy Manager")
 
     def on_search_text_changed(self, text):
         """Handle search text changes"""
@@ -1562,13 +1562,13 @@ class FloppyManagerWindow(QMainWindow):
         if self.image:
             self.image = None
             self.image_path = None
-            self.setWindowTitle("FAT12 Floppy Manager")
+            self.setWindowTitle("Floppy Manager")
             self.refresh_file_list()
             self.status_bar.showMessage("Image closed")
 
     def show_about(self):
         """Show about dialog"""
-        about_text = """<h2>FAT12 Floppy Manager</h2>
+        about_text = """<h2>Floppy Manager</h2>
 
         <p>A modern tool for managing files on FAT12 floppy disk images with VFAT long filename support.</p>
 
@@ -1857,8 +1857,8 @@ class FloppyManagerWindow(QMainWindow):
 def main():
     """Main entry point"""
     app = QApplication(sys.argv)
-    app.setApplicationName("FAT12 Floppy Manager")
-    app.setOrganizationName("FAT12FloppyManager")
+    app.setApplicationName("Floppy Manager")
+    app.setOrganizationName("FloppyManager")
     # Set application style
     app.setStyle('Fusion')
 
