@@ -262,6 +262,8 @@ def create_lfn_entries(long_name: str, short_name: bytes) -> List[bytes]:
         # Get this chunk's characters (26 bytes = 13 UTF-16 chars)
         chunk_start = i * 26
         chunk = lfn_unicode[chunk_start : chunk_start + 26]
+        if len(chunk) < 26:
+            chunk = chunk.ljust(26, b'\xff')
 
         # Characters 1-5 (bytes 1-10)
         entry[1:LFN_ATTR_OFFSET] = chunk[0:10]
