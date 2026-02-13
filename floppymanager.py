@@ -174,9 +174,8 @@ class FloppyManagerWindow(QMainWindow):
         for i in range(1, 6):
             header.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
 
-        # Handle clicks for rename and extract
+        # Handle clicks for rename
         self.table.clicked.connect(self.on_table_clicked)
-        self.table.doubleClicked.connect(self.on_table_double_clicked)
 
         # Context menu
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1737,7 +1736,6 @@ class FloppyManagerWindow(QMainWindow):
         <li>Ctrl+Shift+S - Save image as</li>
         <li>Ctrl+Shift+F - Format disk</li>
         <li>Del/Backspace - Delete selected files</li>
-        <li>Double-click - Extract file</li>
         </ul>
 
         <p><small>© 2026 Stephen P Smith | MIT License</small></p>
@@ -1798,25 +1796,6 @@ class FloppyManagerWindow(QMainWindow):
             self._last_click_time = current_time
             self._last_click_row = row
             self._last_click_col = col
-    
-    def on_table_double_clicked(self, index):
-        """Handle double-clicks on table - extract file"""
-        # Reset click tracking to prevent rename after double-click
-        self._last_click_time = 0
-        self._last_click_row = -1
-        self._last_click_col = -1
-        
-        # Check if item is a directory
-        item = self.table.itemFromIndex(index)
-        if item:
-            entry = item.data(0, Qt.ItemDataRole.UserRole)
-            if entry and entry.get('is_dir'):
-                # It's a directory - let the tree widget handle expansion/collapse (default behavior)
-                # We do NOT want to extract a directory as a binary file
-                return
-
-        # If it's a file, extract it
-        self.extract_selected()
 
     def start_rename(self):
         """Start inline renaming of the selected file (Windows-style)"""
