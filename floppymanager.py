@@ -1196,6 +1196,8 @@ class FloppyManagerWindow(QMainWindow):
 
         success_count = 0
         fail_count = 0
+        corruption_errors = []
+
         for entry in files_to_extract:
             try:
                 data = self.image.extract_file(entry)
@@ -1203,13 +1205,20 @@ class FloppyManagerWindow(QMainWindow):
                 with open(output_path, 'wb') as f:
                     f.write(data)
                 success_count += 1
+            except FAT12CorruptionError as e:
+                fail_count += 1
+                corruption_errors.append(f"{entry['name']}: {e}")
             except Exception as e:
                 fail_count += 1
 
         if success_count > 0:
             self.status_bar.showMessage(f"Extracted {success_count} file(s) to {save_dir}")
             
-        if fail_count > 0:
+        if corruption_errors:
+            QMessageBox.critical(self, "Filesystem Corruption", 
+                               f"Corruption detected during extraction:\n\n" + "\n".join(corruption_errors[:5]) + 
+                               (f"\n...and {len(corruption_errors)-5} more." if len(corruption_errors) > 5 else ""))
+        elif fail_count > 0:
             QMessageBox.warning(self, "Extraction Incomplete", f"Successfully extracted {success_count} files.\nFailed to extract {fail_count} files.")
         elif success_count > 0:
             QMessageBox.information(self, "Success", f"Extracted {success_count} file(s)")
@@ -1246,6 +1255,8 @@ class FloppyManagerWindow(QMainWindow):
 
         success_count = 0
         fail_count = 0
+        corruption_errors = []
+
         try:
             with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for entry in files_to_extract:
@@ -1254,13 +1265,19 @@ class FloppyManagerWindow(QMainWindow):
                         # Use the long filename
                         zipf.writestr(entry['name'], data)
                         success_count += 1
+                    except FAT12CorruptionError as e:
+                        fail_count += 1
+                        corruption_errors.append(f"{entry['name']}: {e}")
                     except Exception as e:
                         fail_count += 1
             
             if success_count > 0:
                 self.status_bar.showMessage(f"Archived {success_count} file(s) to {Path(zip_filename).name}")
                 
-            if fail_count > 0:
+            if corruption_errors:
+                QMessageBox.critical(self, "Filesystem Corruption", 
+                                   f"Corruption detected during archiving:\n\n" + "\n".join(corruption_errors[:5]))
+            elif fail_count > 0:
                 QMessageBox.warning(self, "Archive Incomplete", f"Archived {success_count} files.\nFailed to add {fail_count} files to archive.")
             elif success_count > 0:
                 QMessageBox.information(self, "Success", f"Archived {success_count} file(s) to ZIP file")
