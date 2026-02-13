@@ -416,8 +416,10 @@ def get_entry_offset(fs, parent_cluster: int, index: int, fat_data: bytearray = 
         fat_data: An optional pre-read FAT to avoid re-reading.
 
     Returns:
-        The absolute byte offset of the entry from the start of the disk image,
-        or -1 if the offset is invalid (e.g., corrupted chain).
+        The absolute byte offset of the entry from the start of the disk image.
+    
+    Raises:
+        FAT12CorruptionError: If the directory cluster chain is broken or invalid.
     """
     if parent_cluster is None or parent_cluster == 0:
         return fs.root_start + (index * 32)
