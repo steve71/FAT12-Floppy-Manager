@@ -4,7 +4,7 @@ import struct
 from unittest.mock import patch
 from fat12_handler import FAT12Image
 from vfat_utils import decode_fat_date, decode_fat_time, calculate_lfn_checksum
-from fat12_directory import FAT12Error
+from fat12_directory import FAT12Error, FAT12CorruptionError
 
 @pytest.fixture
 def handler():
@@ -365,11 +365,8 @@ class TestFileIO:
         handler.write_fat(fat)
         
         # Extract
-        extracted = handler.extract_file(entries[0])
-        
-        # Should get first cluster only (512 bytes) despite size saying 1024
-        assert len(extracted) == 512
-        assert extracted == data[:512]
+        with pytest.raises(FAT12CorruptionError):
+            handler.extract_file(entries[0])
 
 class TestDirectoryOperations:
     def test_rename_file(self, tmp_path):

@@ -26,7 +26,7 @@ from fat12_directory import (
     create_directory, delete_directory, delete_directory_entry,
     get_entry_offset, predict_short_name, rename_entry,
     read_raw_directory_entries, find_free_root_entries, delete_entry,
-    find_entry_by_83_name, set_entry_attributes, FAT12Error
+    find_entry_by_83_name, set_entry_attributes, FAT12Error, FAT12CorruptionError
 )
 
 class FAT12Image:
@@ -317,7 +317,7 @@ class FAT12Image:
                         if curr == 0xFF7: # Bad cluster
                             break
                         if curr in visited_chain:
-                            break
+                            raise FAT12CorruptionError(f"Loop detected in file cluster chain for '{full_name}' at cluster {curr}")
                         visited_chain.add(curr)
                         mapping[curr] = full_name
                         curr = self.get_fat_entry(fat_data, curr)
@@ -356,7 +356,7 @@ class FAT12Image:
             if parent is not None:
                 if parent in visited_backwards:
                     # Loop detected in backward traversal
-                    break
+                    raise FAT12CorruptionError(f"Loop detected in FAT chain (backward traversal) at cluster {parent}")
                 visited_backwards.add(parent)
                 current = parent
             else:
@@ -372,7 +372,7 @@ class FAT12Image:
             if curr == 0xFF7:
                 break
             if curr in visited: # Cycle detection
-                break
+                raise FAT12CorruptionError(f"Loop detected in cluster chain at {curr}")
             visited.add(curr)
             chain.append(curr)
             curr = self.get_fat_entry(fat_data, curr)
@@ -561,7 +561,7 @@ class FAT12Image:
             
             while current_cluster < 0xFF8 and remaining > 0:
                 if current_cluster in visited:
-                    raise FAT12Error(f"Loop detected in file cluster chain at {current_cluster}")
+                    raise FAT12CorruptionError(f"Loop detected in file cluster chain at {current_cluster}")
                 visited.add(current_cluster)
 
                 cluster_offset = self.data_start + ((current_cluster - 2) * self.bytes_per_cluster)
@@ -572,6 +572,9 @@ class FAT12Image:
                 remaining -= to_read
                 
                 current_cluster = self.get_fat_entry(fat_data, current_cluster)
+        
+        if len(data) < entry['size']:
+            raise FAT12CorruptionError(f"File '{entry['name']}' truncated: Expected {entry['size']} bytes, got {len(data)}")
         
         return bytes(data[:entry['size']])
     
@@ -772,20 +775,20 @@ class FAT12Image:
             # Patch Metadata (Attributes & Timestamps) directly
             with open(self.image_path, 'r+b') as f:
                 offset = get_entry_offset(self, parent_cluster, target_entry['index'])
-                if offset != -1:
-                    # Attributes (Offset 11)
-                    f.seek(offset + DIR_ATTR_OFFSET)
-                    f.write(bytes([entry['attributes']]))
-                    
-                    # Timestamps (Offset 13-26)
-                    f.seek(offset + DIR_CRT_TIME_TENTH_OFFSET)
-                    f.write(struct.pack('B', entry['creation_time_tenth']))
-                    f.write(struct.pack('<H', entry['creation_time']))
-                    f.write(struct.pack('<H', entry['creation_date']))
-                    f.write(struct.pack('<H', entry['last_accessed_date']))
-                    # Skip High Cluster (2 bytes at 20)
-                    f.seek(offset + DIR_LAST_MOD_TIME_OFFSET)
-                    f.write(struct.pack('<H', entry['last_modified_time']))
-                    f.write(struct.pack('<H', entry['last_modified_date']))
+                
+                # Attributes (Offset 11)
+                f.seek(offset + DIR_ATTR_OFFSET)
+                f.write(bytes([entry['attributes']]))
+                
+                # Timestamps (Offset 13-26)
+                f.seek(offset + DIR_CRT_TIME_TENTH_OFFSET)
+                f.write(struct.pack('B', entry['creation_time_tenth']))
+                f.write(struct.pack('<H', entry['creation_time']))
+                f.write(struct.pack('<H', entry['creation_date']))
+                f.write(struct.pack('<H', entry['last_accessed_date']))
+                # Skip High Cluster (2 bytes at 20)
+                f.seek(offset + DIR_LAST_MOD_TIME_OFFSET)
+                f.write(struct.pack('<H', entry['last_modified_time']))
+                f.write(struct.pack('<H', entry['last_modified_date']))
         
         return True

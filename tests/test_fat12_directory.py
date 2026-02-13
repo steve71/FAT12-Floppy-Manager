@@ -3,7 +3,7 @@ from fat12_handler import FAT12Image
 from fat12_directory import (
     iter_directory_entries, get_entry_offset, 
     get_existing_83_names_in_directory, find_free_directory_entries,
-    free_cluster_chain, FAT12Error
+    free_cluster_chain, FAT12Error, FAT12CorruptionError
 )
 
 @pytest.fixture
@@ -161,8 +161,8 @@ class TestDirectoryInternals:
         # Index 16 (start of next cluster, if it existed)
         # Since we only have 1 cluster, this should return -1 or handle chain end
         # get_entry_offset returns -1 if chain ends
-        offset = get_entry_offset(image, cluster, 16)
-        assert offset == -1
+        with pytest.raises(FAT12CorruptionError):
+            get_entry_offset(image, cluster, 16)
 
     def test_get_existing_names(self, image):
         """Test retrieving existing 8.3 names"""

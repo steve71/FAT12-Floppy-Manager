@@ -36,6 +36,10 @@ class FAT12Error(Exception):
     """Base exception for FAT12 filesystem errors"""
     pass
 
+class FAT12CorruptionError(FAT12Error):
+    """Exception for detected filesystem corruption (loops, invalid chains)"""
+    pass
+
 def iter_directory_entries(fs, cluster: int = None):
     """
     Iterates through all 32-byte directory entries in a given directory.
@@ -69,7 +73,7 @@ def iter_directory_entries(fs, cluster: int = None):
             
             while current_cluster >= 2 and current_cluster < 0xFF8:
                 if current_cluster in visited:
-                    raise FAT12Error(f"Loop detected in directory cluster chain at {current_cluster}")
+                    raise FAT12CorruptionError(f"Loop detected in directory cluster chain at {current_cluster}")
                 visited.add(current_cluster)
 
                 offset = fs.data_start + ((current_cluster - 2) * fs.bytes_per_cluster)
@@ -342,7 +346,11 @@ def find_free_directory_entries(fs, cluster: int = None, required_slots: int = 1
     # Extend the cluster chain
     fat_data = fs.read_fat()
     curr = cluster
+    visited = set()
     while True:
+        if curr in visited:
+            raise FAT12CorruptionError(f"Loop detected in directory cluster chain at {curr}")
+        visited.add(curr)
         next_clus = fs.get_fat_entry(fat_data, curr)
         if next_clus >= 0xFF8:
             break
@@ -424,7 +432,8 @@ def get_entry_offset(fs, parent_cluster: int, index: int, fat_data: bytearray = 
     curr = parent_cluster
     for _ in range(cluster_skip):
         curr = fs.get_fat_entry(fat_data, curr)
-        if curr >= 0xFF8: return -1
+        if curr >= 0xFF8:
+            raise FAT12CorruptionError(f"Directory cluster chain broken at index {index}")
         
     return fs.data_start + ((curr - 2) * fs.bytes_per_cluster) + (entry_offset * 32)
 
@@ -471,6 +480,8 @@ def write_directory_entries(fs, parent_cluster: int, entry_index: int,
             fat_data = fs.read_fat()
             for _ in range(start_cluster_idx):
                 current_cluster = fs.get_fat_entry(fat_data, current_cluster)
+                if current_cluster >= 0xFF8:
+                    raise FAT12CorruptionError(f"Broken directory chain while writing at index {entry_index}")
             
             # Write entries
             all_entries = lfn_entries + [short_entry]
@@ -480,6 +491,8 @@ def write_directory_entries(fs, parent_cluster: int, entry_index: int,
                 
                 if current_idx_in_cluster >= entries_per_cluster:
                     current_cluster = fs.get_fat_entry(fat_data, current_cluster)
+                    if current_cluster >= 0xFF8:
+                        raise FAT12CorruptionError(f"Broken directory chain while writing entry part {i}")
                     offset_in_cluster = 0
                     current_idx_in_cluster = 0
                 
@@ -630,9 +643,6 @@ def delete_directory_entry(fs, parent_cluster: int, entry_index: int):
     with open(fs.image_path, 'r+b') as f:
         # Mark the short entry as deleted
         offset = get_entry_offset(fs, parent_cluster, entry_index, fat_data)
-        if offset == -1:
-            raise FAT12Error(f"Could not calculate offset for entry index {entry_index}")
-            
         f.seek(offset)
         f.write(b'\xE5')
         
@@ -640,7 +650,6 @@ def delete_directory_entry(fs, parent_cluster: int, entry_index: int):
         index = entry_index - 1
         while index >= 0:
             offset = get_entry_offset(fs, parent_cluster, index, fat_data)
-            if offset == -1: break
             f.seek(offset)
             entry_data = f.read(32)
             
@@ -661,8 +670,13 @@ def free_cluster_chain(fs, start_cluster: int):
         
     fat_data = fs.read_fat()
     current_cluster = start_cluster
+    visited = set()
     
     while current_cluster < 0xFF8:
+        if current_cluster in visited:
+            raise FAT12CorruptionError(f"Loop detected in cluster chain while freeing at {current_cluster}")
+        visited.add(current_cluster)
+        
         next_cluster = fs.get_fat_entry(fat_data, current_cluster)
         fs.set_fat_entry(fat_data, current_cluster, 0)
         current_cluster = next_cluster
@@ -794,7 +808,6 @@ def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False)
     with open(fs.image_path, 'rb') as f:
         while idx >= 0:
             offset = get_entry_offset(fs, parent_cluster, idx, fat_data)
-            if offset == -1: break
             f.seek(offset)
             data = f.read(32)
             if data[DIR_ATTR_OFFSET] == 0x0F: # Attribute 0x0F is LFN
@@ -914,9 +927,6 @@ def set_entry_attributes(fs, entry: dict, is_read_only: bool = None,
     with open(fs.image_path, 'r+b') as f:
         parent_cluster = entry.get('parent_cluster')
         offset = get_entry_offset(fs, parent_cluster, entry['index'])
-        if offset == -1:
-            raise FAT12Error(f"Could not find offset for entry {entry.get('name', 'Unknown')}")
-        
         # Read current attributes from disk
         f.seek(offset + DIR_ATTR_OFFSET)
         current_attr_bytes = f.read(1)

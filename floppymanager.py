@@ -30,7 +30,7 @@ from PySide6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, 
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
-from fat12_directory import FAT12Error
+from fat12_directory import FAT12Error, FAT12CorruptionError
 from gui_components import (
     BootSectorViewer, DirectoryViewer, FATViewer, FileAttributesDialog,
     SortableTreeWidgetItem, FileTreeWidget, RenameDelegate, FormatDialog,
@@ -907,6 +907,9 @@ class FloppyManagerWindow(QMainWindow):
 
                 self.info_label.setText(f"{file_count} files | {self.image.get_free_space():,} bytes free")
                 self.status_bar.showMessage(f"Loaded {file_count} files")
+            
+            except FAT12CorruptionError as e:
+                QMessageBox.critical(self, "Filesystem Corruption Detected", f"Error reading directory structure:\n{e}\n\nThe disk image may be corrupted.")
 
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to read directory: {e}")
@@ -952,8 +955,11 @@ class FloppyManagerWindow(QMainWindow):
             )
             return
         
-        viewer = FATViewer(self.image, self)
-        viewer.exec()
+        try:
+            viewer = FATViewer(self.image, self)
+            viewer.exec()
+        except FAT12CorruptionError as e:
+            QMessageBox.critical(self, "Filesystem Corruption", f"Cannot open FAT Viewer due to filesystem corruption:\n{e}")
 
     def add_files(self):
         """Add files to the image via file dialog"""
@@ -1056,6 +1062,10 @@ class FloppyManagerWindow(QMainWindow):
                 self.image.write_file_to_image(original_name, data, self.use_numeric_tail, modification_dt, parent_cluster)
                 success_count += 1
 
+            except FAT12CorruptionError as e:
+                fail_count += 1
+                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot write {Path(filepath).name}:\n{e}")
+
             except FAT12Error as e:
                 fail_count += 1
                 QMessageBox.warning(self, "Error", f"Failed to write {Path(filepath).name}: {e}")
@@ -1123,6 +1133,8 @@ class FloppyManagerWindow(QMainWindow):
                 self.image.create_directory(name, parent_cluster, self.use_numeric_tail)
                 self.refresh_file_list()
                 self.status_bar.showMessage(f"Created folder: {name}")
+            except FAT12CorruptionError as e:
+                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot create directory:\n{e}")
             except FAT12Error as e:
                 QMessageBox.critical(self, "Error", f"Failed to create directory: {e}")
 
@@ -1156,6 +1168,8 @@ class FloppyManagerWindow(QMainWindow):
                         f.write(data)
 
                     success_count += 1
+                except FAT12CorruptionError as e:
+                    QMessageBox.critical(self, "Filesystem Corruption", f"Cannot extract '{entry['name']}':\n{e}")
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Failed to extract {entry['name']}: {e}")
 
@@ -1305,6 +1319,8 @@ class FloppyManagerWindow(QMainWindow):
                 try:
                     self.image.delete_directory(entry, recursive=True)
                     success_count += 1
+                except FAT12CorruptionError as e:
+                    QMessageBox.critical(self, "Filesystem Corruption", f"Cannot delete directory {entry['name']}:\n{e}")
                 except FAT12Error as e:
                     QMessageBox.critical(self, "Error", f"Failed to delete directory {entry['name']}: {e}")
             else:
@@ -1361,6 +1377,8 @@ class FloppyManagerWindow(QMainWindow):
             self.image.write_file_to_image(new_name, data, self.use_numeric_tail, None, parent_cluster)
             self.refresh_file_list()
             self.status_bar.showMessage(f"Copied: {new_name}")
+        except FAT12CorruptionError as e:
+            QMessageBox.critical(self, "Filesystem Corruption", f"Cannot copy file:\n{e}")
         except FAT12Error as e:
             QMessageBox.warning(self, "Error", f"Failed to copy file: {e}")
                 
@@ -1411,6 +1429,8 @@ class FloppyManagerWindow(QMainWindow):
                 else:
                     self.image.delete_file(entry)
                 success_count += 1
+            except FAT12CorruptionError as e:
+                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot delete {entry['name']}:\n{e}")
             except FAT12Error:
                 pass # Skip failed deletions in bulk op
 
@@ -1560,6 +1580,8 @@ class FloppyManagerWindow(QMainWindow):
                 self.refresh_file_list()
                 self.status_bar.showMessage("Disk defragmented successfully")
                 QMessageBox.information(self, "Success", "Disk defragmentation complete.")
+            except FAT12CorruptionError as e:
+                QMessageBox.critical(self, "Filesystem Corruption", f"Defragmentation aborted due to corruption:\n{e}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Defragmentation failed: {e}")
 
@@ -1855,6 +1877,8 @@ class FloppyManagerWindow(QMainWindow):
                 self.status_bar.showMessage(f"Renamed '{old_name}' to '{new_name}'")
                 # Refresh the file list to show the new name and short name
                 self.refresh_file_list()
+            except FAT12CorruptionError as e:
+                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot rename file:\n{e}")
             except FAT12Error as e:
                 QMessageBox.critical(
                     self,

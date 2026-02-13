@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QPalette, QDrag
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
+from fat12_directory import FAT12CorruptionError
 from vfat_utils import parse_raw_lfn_entry, parse_raw_short_entry, get_raw_entry_chain, split_filename_for_editing
 
 class BootSectorViewer(QDialog):
@@ -468,17 +469,21 @@ class FATViewer(QDialog):
     
     def cluster_clicked(self, cluster_num):
         """Handle cluster click - select entire chain (or deselect if already selected)"""
-        # Get the full chain from the backend
-        chain_list = self.image.get_cluster_chain(cluster_num)
-        chain = set(chain_list)
-        
-        # Toggle: if this chain is already selected, deselect it
-        if chain == self.selected_chain:
-            self.selected_chain.clear()
-        else:
-            self.selected_chain = chain
-        
-        self.update_cluster_colors()
+        try:
+            # Get the full chain from the backend
+            chain_list = self.image.get_cluster_chain(cluster_num)
+            chain = set(chain_list)
+            
+            # Toggle: if this chain is already selected, deselect it
+            if chain == self.selected_chain:
+                self.selected_chain.clear()
+            else:
+                self.selected_chain = chain
+            
+            self.update_cluster_colors()
+        except FAT12CorruptionError as e:
+            QMessageBox.warning(self, "Corruption Detected", str(e))
+            return
     
     def create_legend_layout(self):
         """Create or recreate the legend layout with current theme colors"""
