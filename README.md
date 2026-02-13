@@ -2,7 +2,7 @@
 
 ## Python PySide6 GUI for managing FAT12 floppy disk images
 
-A modern GUI tool designed for managing FAT12 formatted floppy disk images (.img) used in Yamaha keyboards like the **DGX-500**, **PSR series**, and **Clavinova** or other vintage keyboards. Currently verified to work with Yamaha DGX-500.
+A modern, easy-to-use tool for creating and managing FAT12 floppy disk images (.img) used with Gotek/FlashFloppy drives in vintage Yamaha keyboards using floppy drives. Eliminates the hassle of mounting virtual disks—simply create an image, drag and drop your files, and copy to USB. Verified working with Yamaha DGX-500 + Gotek SFR1M44-U100LQD (FlashFloppy firmware)
 
 <img width="899" height="664" alt="image" src="https://github.com/user-attachments/assets/881d088a-85ae-4c4a-8bdc-361ac8ad08c1" />
 
