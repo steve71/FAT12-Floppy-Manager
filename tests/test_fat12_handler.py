@@ -204,7 +204,7 @@ class TestFileIO:
         filename = "hello.txt"
         
         # Write file
-        assert handler.write_file_to_image(filename, content)
+        handler.write_file_to_image(filename, content)
         
         # Verify file exists in directory
         entries = handler.read_root_directory()
@@ -223,7 +223,7 @@ class TestFileIO:
         filename = "largefile.bin"
         
         # Write file
-        assert handler.write_file_to_image(filename, content)
+        handler.write_file_to_image(filename, content)
         
         # Verify file exists in directory
         entries = handler.read_root_directory()
@@ -237,7 +237,7 @@ class TestFileIO:
         assert extracted == content
 
     def test_write_zero_byte_file(self, handler):
-        assert handler.write_file_to_image("empty.txt", b"")
+        handler.write_file_to_image("empty.txt", b"")
         
         entries = handler.read_root_directory()
         assert len(entries) == 1
@@ -270,7 +270,7 @@ class TestFileIO:
         entries = handler.read_root_directory()
         assert len(entries) == 1
         
-        assert handler.delete_file(entries[0])
+        handler.delete_file(entries[0])
         
         entries_after = handler.read_root_directory()
         assert len(entries_after) == 0
@@ -316,7 +316,7 @@ class TestDirectoryOperations:
         handler.write_file_to_image("old_name.txt", b"content")
         entries = handler.read_root_directory()
         
-        assert handler.rename_entry(entries[0], "new_name.txt")
+        handler.rename_entry(entries[0], "new_name.txt")
         
         entries_new = handler.read_root_directory()
         assert len(entries_new) == 1
@@ -599,7 +599,7 @@ class TestDirectoryOperations:
         # We use short names to ensure 1 entry per file
         for i in range(224):
             fname = f"F{i}.TXT"
-            assert handler.write_file_to_image(fname, b"")
+            handler.write_file_to_image(fname, b"")
             
         # Try to write one more
         with pytest.raises(FAT12Error):
@@ -873,7 +873,7 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("TESTFILE.TXT", test_data)
+        handler.write_file_to_image("TESTFILE.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
@@ -884,7 +884,7 @@ class TestFileAttributes:
         assert entry['attributes'] == 0x20  # Archive bit only
         
         # Set read-only
-        assert handler.set_entry_attributes(entry, is_read_only=True)
+        handler.set_entry_attributes(entry, is_read_only=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -894,7 +894,7 @@ class TestFileAttributes:
         assert entry['attributes'] & 0x20  # Archive bit still set
         
         # Clear read-only
-        assert handler.set_entry_attributes(entry, is_read_only=False)
+        handler.set_entry_attributes(entry, is_read_only=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -908,7 +908,7 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("HIDDEN.TXT", test_data)
+        handler.write_file_to_image("HIDDEN.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
@@ -918,7 +918,7 @@ class TestFileAttributes:
         assert not entry['is_hidden']
         
         # Set hidden
-        assert handler.set_entry_attributes(entry, is_hidden=True)
+        handler.set_entry_attributes(entry, is_hidden=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -927,7 +927,7 @@ class TestFileAttributes:
         assert entry['attributes'] & 0x02  # Hidden bit set
         
         # Clear hidden
-        assert handler.set_entry_attributes(entry, is_hidden=False)
+        handler.set_entry_attributes(entry, is_hidden=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -940,7 +940,7 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("SYSTEM.SYS", test_data)
+        handler.write_file_to_image("SYSTEM.SYS", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
@@ -950,7 +950,7 @@ class TestFileAttributes:
         assert not entry['is_system']
         
         # Set system
-        assert handler.set_entry_attributes(entry, is_system=True)
+        handler.set_entry_attributes(entry, is_system=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -963,7 +963,7 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("ARCHIVE.TXT", test_data)
+        handler.write_file_to_image("ARCHIVE.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
@@ -973,7 +973,7 @@ class TestFileAttributes:
         assert entry['is_archive']
         
         # Clear archive
-        assert handler.set_entry_attributes(entry, is_archive=False)
+        handler.set_entry_attributes(entry, is_archive=False)
         
         # Verify it was cleared
         entries = handler.read_root_directory()
@@ -982,7 +982,7 @@ class TestFileAttributes:
         assert not (entry['attributes'] & 0x20)  # Archive bit cleared
         
         # Set archive again
-        assert handler.set_entry_attributes(entry, is_archive=True)
+        handler.set_entry_attributes(entry, is_archive=True)
         
         # Verify it was set
         entries = handler.read_root_directory()
@@ -995,14 +995,14 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("MULTI.TXT", test_data)
+        handler.write_file_to_image("MULTI.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == "MULTI.TXT")
         
         # Set multiple attributes at once
-        assert handler.set_entry_attributes(
+        handler.set_entry_attributes(
             entry, 
             is_read_only=True, 
             is_hidden=True, 
@@ -1026,19 +1026,19 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("PARTIAL.TXT", test_data)
+        handler.write_file_to_image("PARTIAL.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
         
         # Set read-only and hidden
-        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
+        handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Now only change archive, leaving read-only and hidden alone
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == "PARTIAL.TXT")
-        assert handler.set_entry_attributes(entry, is_archive=False)
+        handler.set_entry_attributes(entry, is_archive=False)
         
         # Verify read-only and hidden are still set, but archive is cleared
         entries = handler.read_root_directory()
@@ -1053,7 +1053,7 @@ class TestFileAttributes:
         
         # Add a test file
         test_data = b"Test file content"
-        assert handler.write_file_to_image("PRESERVE.TXT", test_data)
+        handler.write_file_to_image("PRESERVE.TXT", test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
@@ -1064,7 +1064,7 @@ class TestFileAttributes:
         assert not (original_attr & 0x10)  # Should not be a directory
         
         # Try to set various attributes
-        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
+        handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Verify directory bit is still clear
         entries = handler.read_root_directory()
@@ -1078,25 +1078,14 @@ class TestFileAttributes:
         # Add a file with a long name that needs LFN entries
         test_data = b"Test file content"
         long_name = "This is a very long filename.txt"
-        assert handler.write_file_to_image(long_name, test_data)
+        handler.write_file_to_image(long_name, test_data)
         
         # Get the file entry
         entries = handler.read_root_directory()
         entry = next(e for e in entries if e['name'] == long_name)
         
         # Set attributes
-        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
-        
-        # Verify attributes are set correctly
-        entries = handler.read_root_directory()
-        entry = next(e for e in entries if e['name'] == long_name)
-        assert entry['is_read_only']
-        assert entry['is_hidden']
-        
-        # Verify the file can still be read correctly
-        assert len(entries) > 0
-        assert entry['name'] == long_name
-        assert handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
+        handler.set_entry_attributes(entry, is_read_only=True, is_hidden=True)
         
         # Verify attributes are set correctly
         entries = handler.read_root_directory()
@@ -1119,7 +1108,7 @@ class TestFileAttributes:
         assert entry['is_dir']
         
         # Set Hidden and System
-        assert handler.set_entry_attributes(entry, is_hidden=True, is_system=True)
+        handler.set_entry_attributes(entry, is_hidden=True, is_system=True)
         
         # Verify
         entries = handler.read_root_directory()

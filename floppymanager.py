@@ -12,7 +12,6 @@ import sys
 import os
 import shutil
 import zipfile
-import tempfile
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -23,7 +22,7 @@ from vfat_utils import format_83_name, decode_fat_datetime
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTreeWidget, QFileDialog, QMessageBox, QLabel, QStatusBar, QMenu,
-    QDialog, QToolBar, QStyle, QInputDialog, QHeaderView
+    QDialog, QToolBar, QStyle, QInputDialog, QHeaderView, QLineEdit
 )
 from PySide6.QtCore import Qt, QSettings, QTimer, QSize
 from PySide6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor
@@ -37,8 +36,6 @@ from gui_components import (
     NewImageDialog
 )
 from file_icons import FileIconProvider
-
-from PySide6.QtWidgets import QLineEdit
 
 class FloppyManagerWindow(QMainWindow):
     """Main window for the floppy manager"""

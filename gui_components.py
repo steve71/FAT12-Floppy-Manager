@@ -18,7 +18,7 @@ from PySide6.QtGui import QColor, QPalette, QDrag
 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
-from fat12_directory import FAT12CorruptionError
+from fat12_directory import FAT12CorruptionError, FAT12Error
 from vfat_utils import parse_raw_lfn_entry, parse_raw_short_entry, get_raw_entry_chain, split_filename_for_editing
 
 class BootSectorViewer(QDialog):
@@ -1090,8 +1090,11 @@ class FileTreeWidget(QTreeWidget):
                 if is_internal and not is_copy and success_count == len(files):
                     deleted_count = 0
                     for entry in entries_to_delete:
-                        if main_window.image.delete_file(entry):
+                        try:
+                            main_window.image.delete_file(entry)
                             deleted_count += 1
+                        except FAT12Error:
+                            pass
                     
                     main_window.refresh_file_list()
                     main_window.status_bar.showMessage(f"Moved {deleted_count} file(s)")

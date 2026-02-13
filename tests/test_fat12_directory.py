@@ -14,7 +14,7 @@ def handler(tmp_path):
 
 class TestDirectoryCreation:
     def test_create_directory_root(self, handler):
-        assert handler.create_directory("TESTDIR")
+        handler.create_directory("TESTDIR")
         entries = handler.read_root_directory()
         entry = next((e for e in entries if e['name'] == "TESTDIR"), None)
         assert entry is not None
@@ -25,7 +25,7 @@ class TestDirectoryCreation:
         handler.create_directory("PARENT")
         parent = next(e for e in handler.read_root_directory() if e['name'] == "PARENT")
         
-        assert handler.create_directory("CHILD", parent_cluster=parent['cluster'])
+        handler.create_directory("CHILD", parent_cluster=parent['cluster'])
         
         sub_entries = handler.read_directory(parent['cluster'])
         child = next((e for e in sub_entries if e['name'] == "CHILD"), None)
@@ -37,7 +37,7 @@ class TestDirectoryDeletion:
         handler.create_directory("EMPTY")
         entry = next(e for e in handler.read_root_directory() if e['name'] == "EMPTY")
         
-        assert handler.delete_directory(entry)
+        handler.delete_directory(entry)
         
         entries = handler.read_root_directory()
         assert not any(e['name'] == "EMPTY" for e in entries)
@@ -58,7 +58,7 @@ class TestDirectoryDeletion:
         
         handler.write_file_to_image("FILE.TXT", b"data", parent_cluster=entry['cluster'])
         
-        assert handler.delete_directory(entry, recursive=True)
+        handler.delete_directory(entry, recursive=True)
         
         entries = handler.read_root_directory()
         assert not any(e['name'] == "RECURSIVE" for e in entries)
@@ -68,7 +68,7 @@ class TestFileOperationsInDirectory:
         handler.create_directory("DOCS")
         docs = next(e for e in handler.read_root_directory() if e['name'] == "DOCS")
         
-        assert handler.write_file_to_image("NOTE.TXT", b"content", parent_cluster=docs['cluster'])
+        handler.write_file_to_image("NOTE.TXT", b"content", parent_cluster=docs['cluster'])
         
         sub_entries = handler.read_directory(docs['cluster'])
         file_entry = next((e for e in sub_entries if e['name'] == "NOTE.TXT"), None)
@@ -84,7 +84,7 @@ class TestFileOperationsInDirectory:
         sub_entries = handler.read_directory(trash['cluster'])
         junk = next(e for e in sub_entries if e['name'] == "JUNK.TXT")
         
-        assert handler.delete_file(junk)
+        handler.delete_file(junk)
         
         sub_entries = handler.read_directory(trash['cluster'])
         assert not any(e['name'] == "JUNK.TXT" for e in sub_entries)

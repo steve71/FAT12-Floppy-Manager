@@ -519,7 +519,7 @@ class FAT12Image:
     def write_file_to_image(self, filename: str, data: bytes, 
                            use_numeric_tail: bool = False, 
                            modification_dt: Optional[datetime.datetime] = None,
-                           parent_cluster: int = None) -> bool:
+                           parent_cluster: int = None):
         """Write a file to the disk image with VFAT long filename support
         
         Args:
@@ -529,8 +529,6 @@ class FAT12Image:
             modification_dt: Optional modification datetime (defaults to now)
             parent_cluster: Cluster of the parent directory (None for root)
             
-        Returns:
-            True on success.
         Raises:
             FAT12Error: If disk is full or other FS errors.
         """
@@ -625,8 +623,6 @@ class FAT12Image:
             
             # Write FAT
             self.write_fat(fat_data)
-    
-        return True
 
     def get_existing_83_names_in_directory(self, cluster: int = None) -> List[str]:
         """
@@ -653,14 +649,12 @@ class FAT12Image:
         """
         return find_free_directory_entries(self, cluster, required_slots)
 
-    def create_directory(self, dir_name: str, parent_cluster: int = None, use_numeric_tail: bool = True) -> bool:
+    def create_directory(self, dir_name: str, parent_cluster: int = None, use_numeric_tail: bool = True):
         """Create a new directory
-        Returns:
-            True on success.
         Raises:
             FAT12Error: If directory exists or disk is full.
         """
-        return create_directory(self, dir_name, parent_cluster, use_numeric_tail)
+        create_directory(self, dir_name, parent_cluster, use_numeric_tail)
 
     def find_free_root_entries(self, required_slots: int) -> int:
         """
@@ -669,45 +663,40 @@ class FAT12Image:
         """
         return find_free_root_entries(self, required_slots)
 
-    def rename_entry(self, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
+    def rename_entry(self, entry: dict, new_name: str, use_numeric_tail: bool = False):
         """
         Rename a file, updating 8.3 name, LFN entries, and handling directory slot reallocation.
         Raises:
             FAT12Error: If name exists or disk is full.
         """
-        return rename_entry(self, entry, new_name, use_numeric_tail)
+        rename_entry(self, entry, new_name, use_numeric_tail)
 
-    def delete_file(self, entry: dict) -> bool:
+    def delete_file(self, entry: dict):
         """Delete a file from the image (including LFN entries)
         Raises:
             FAT12Error: If file cannot be deleted.
         """
-        return delete_entry(self, entry)
+        delete_entry(self, entry)
     
-    def delete_directory(self, entry: dict, recursive: bool = False) -> bool:
+    def delete_directory(self, entry: dict, recursive: bool = False):
         """Delete a directory
         Args:
             entry: Directory entry dictionary
             recursive: If True, delete non-empty directories (and their contents)
-        Returns:
-            True on success.
         Raises:
             FAT12Error: If directory is not empty (and recursive=False).
         """
-        return delete_directory(self, entry, recursive)
+        delete_directory(self, entry, recursive)
 
-    def delete_directory_entry(self, parent_cluster: int, entry_index: int) -> bool:
+    def delete_directory_entry(self, parent_cluster: int, entry_index: int):
         """
         Delete a directory entry (mark as deleted).
 
         Args:
             parent_cluster: The directory cluster.
             entry_index: The index of the entry to delete.
-
-        Returns:
-            True on success.
         """
-        return delete_directory_entry(self, parent_cluster, entry_index)
+        delete_directory_entry(self, parent_cluster, entry_index)
 
     def extract_file(self, entry: dict) -> bytes:
         """
@@ -841,7 +830,7 @@ class FAT12Image:
 
     def set_entry_attributes(self, entry: dict, is_read_only: bool = None, 
                            is_hidden: bool = None, is_system: bool = None, 
-                           is_archive: bool = None) -> bool:
+                           is_archive: bool = None):
         """
         Modify file attributes for a directory entry.
         
@@ -852,12 +841,10 @@ class FAT12Image:
             is_system: Set system flag (None = no change)
             is_archive: Set archive flag (None = no change)
             
-        Returns:
-            True on success.
         Raises:
             FAT12Error: If entry cannot be found.
         """
-        return set_entry_attributes(self, entry, is_read_only, is_hidden, is_system, is_archive)
+        set_entry_attributes(self, entry, is_read_only, is_hidden, is_system, is_archive)
 
     def format_disk(self, full_format: bool = False):
         """Format the disk - erase all files and reset FAT to clean state
@@ -909,7 +896,7 @@ class FAT12Image:
                 f.flush()
                 os.fsync(f.fileno())
 
-    def defragment_filesystem(self) -> bool:
+    def defragment_filesystem(self):
         """
         Defragment the filesystem by reading all files to memory,
         formatting the disk, and writing them back contiguously.
@@ -980,5 +967,3 @@ class FAT12Image:
                 f.seek(offset + DIR_LAST_MOD_TIME_OFFSET)
                 f.write(struct.pack('<H', entry['last_modified_time']))
                 f.write(struct.pack('<H', entry['last_modified_date']))
-        
-        return True

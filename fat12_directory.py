@@ -558,7 +558,7 @@ def initialize_directory(fs, dir_cluster: int, parent_cluster: int = None):
         f.flush()
         os.fsync(f.fileno())
 
-def create_directory(fs, dir_name: str, parent_cluster: int = None, use_numeric_tail: bool = True) -> bool:
+def create_directory(fs, dir_name: str, parent_cluster: int = None, use_numeric_tail: bool = True):
     """
     Creates a new subdirectory.
 
@@ -577,8 +577,6 @@ def create_directory(fs, dir_name: str, parent_cluster: int = None, use_numeric_
                         the directory is created in the root.
         use_numeric_tail: Toggles the 8.3 name generation algorithm.
 
-    Returns:
-        True on success.
     Raises:
         FAT12Error: If directory exists, disk is full, or other FS errors.
     """
@@ -618,8 +616,6 @@ def create_directory(fs, dir_name: str, parent_cluster: int = None, use_numeric_
     
     write_directory_entries(fs, parent_cluster, entry_index, lfn_entries, entry)
     initialize_directory(fs, dir_cluster, parent_cluster)
-    
-    return True
 
 def delete_directory_entry(fs, parent_cluster: int, entry_index: int):
     """
@@ -685,7 +681,7 @@ def free_cluster_chain(fs, start_cluster: int):
     
     fs.write_fat(fat_data)
 
-def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
+def delete_directory(fs, entry: dict, recursive: bool = False):
     """
     Deletes a directory.
 
@@ -700,8 +696,6 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
         recursive: If True, allows deletion of non-empty directories by
                    deleting their contents first.
 
-    Returns:
-        True on success.
     Raises:
         FAT12Error: If directory is not empty (and recursive=False) or other FS errors.
     """
@@ -726,7 +720,7 @@ def delete_directory(fs, entry: dict, recursive: bool = False) -> bool:
                 delete_entry(fs, sub_entry)
     
     # Delete the directory entry itself and free clusters
-    return delete_entry(fs, entry)
+    delete_entry(fs, entry)
 
 def delete_entry(fs, entry: dict):
     """Delete a directory entry (file or directory) and free its clusters"""
@@ -735,10 +729,8 @@ def delete_entry(fs, entry: dict):
     
     # Free clusters in FAT
     free_cluster_chain(fs, entry['cluster'])
-    
-    return True
 
-def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False) -> bool:
+def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False):
     """
     Renames a file or directory, handling both LFN and 8.3 name updates.
 
@@ -758,8 +750,6 @@ def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False)
         use_numeric_tail: Toggles the 8.3 name generation algorithm for the
                           new short name.
 
-    Returns:
-        True on success.
     Raises:
         FAT12Error: If name exists, disk is full, or other FS errors.
     """
@@ -871,8 +861,6 @@ def rename_entry(fs, entry: dict, new_name: str, use_numeric_tail: bool = False)
         f.flush()
         os.fsync(f.fileno())
 
-    return True
-
 def predict_short_name(fs, long_name: str, use_numeric_tail: bool = False, parent_cluster: int = None) -> str:
     """
     Predicts the 8.3 short name that will be generated for a given long name.
@@ -908,7 +896,7 @@ def find_entry_by_83_name(fs, target_83_name: str) -> Optional[dict]:
 
 def set_entry_attributes(fs, entry: dict, is_read_only: bool = None, 
                        is_hidden: bool = None, is_system: bool = None, 
-                       is_archive: bool = None) -> bool:
+                       is_archive: bool = None):
     """
     Modify file attributes for a directory entry.
     Reads current attributes from disk to ensure bits like Directory (0x10) are preserved.
@@ -921,8 +909,6 @@ def set_entry_attributes(fs, entry: dict, is_read_only: bool = None,
         is_system: Set system flag (None = no change)
         is_archive: Set archive flag (None = no change)
         
-    Returns:
-        True on success.
     Raises:
         FAT12Error: If entry cannot be found or read.
     """
@@ -958,5 +944,3 @@ def set_entry_attributes(fs, entry: dict, is_read_only: bool = None,
             f.write(bytes([new_attr]))
             f.flush()
             os.fsync(f.fileno())
-            
-    return True
