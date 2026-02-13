@@ -126,6 +126,7 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
 
 ### Keyboard Shortcuts
 - **Delete/Backspace** - Delete selected files
+- **Ctrl+A** - Select all
 - **Ctrl+N** - Create new image
 - **Ctrl+O** - Open different image
 - **Ctrl+W** - Close image
