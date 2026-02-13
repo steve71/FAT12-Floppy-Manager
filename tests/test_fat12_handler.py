@@ -7,11 +7,6 @@ from vfat_utils import decode_fat_date, decode_fat_time, calculate_lfn_checksum
 from fat12_directory import FAT12Error, FAT12CorruptionError
 
 @pytest.fixture
-def handler():
-    # Create instance without running full __init__ to test methods in isolation
-    return FAT12Image.__new__(FAT12Image)
-
-@pytest.fixture
 def handler(tmp_path):
     img_path = tmp_path / "test.img"
     FAT12Image.create_empty_image(str(img_path))
