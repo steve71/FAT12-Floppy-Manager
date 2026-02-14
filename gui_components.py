@@ -1192,7 +1192,7 @@ class NewImageDialog(QDialog):
         self.setWindowTitle("Create New Image")
         self.formats = formats
         self.display_names = display_names
-        self.selected_format = formats[0] if formats else '1.44M'
+        self.selected_format = formats[0] if formats else '1.44MB'
         
         self.settings = QSettings('FloppyManager', 'Settings')
         self.oem_name = self.settings.value('last_oem_name', "MSDOS5.0", type=str)

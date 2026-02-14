@@ -44,7 +44,7 @@ class FAT12Image:
 
     # Supported Floppy Formats
     FORMATS = {
-        '1.44M': {
+        '1.44MB': {
             'name': '3.5" High Density (1.44 MB)',
             'total_sectors': 2880,
             'sectors_per_cluster': 1,
@@ -56,7 +56,7 @@ class FAT12Image:
             'reserved_sectors': 1,
             'hidden_sectors': 0
         },
-        '720K': {
+        '720KB': {
             'name': '3.5" Double Density (720 KB)',
             'total_sectors': 1440,
             'sectors_per_cluster': 2,
@@ -68,7 +68,7 @@ class FAT12Image:
             'reserved_sectors': 1,
             'hidden_sectors': 0
         },
-        '2.88M': {
+        '2.88MB': {
             'name': '3.5" Extra High Density (2.88 MB)',
             'total_sectors': 5760,
             'sectors_per_cluster': 2,
@@ -80,7 +80,7 @@ class FAT12Image:
             'reserved_sectors': 1,
             'hidden_sectors': 0
         },
-        '1.2M': {
+        '1.2MB': {
             'name': '5.25" High Density (1.2 MB)',
             'total_sectors': 2400,
             'sectors_per_cluster': 1,
@@ -92,7 +92,7 @@ class FAT12Image:
             'reserved_sectors': 1,
             'hidden_sectors': 0
         },
-        '360K': {
+        '360KB': {
             'name': '5.25" Double Density (360 KB)',
             'total_sectors': 720,
             'sectors_per_cluster': 2,
@@ -190,6 +190,19 @@ class FAT12Image:
             Total size calculated as total_sectors * bytes_per_sector.
         """
         return self.total_sectors * self.bytes_per_sector
+
+    def get_format_name(self) -> str:
+        """Get the friendly format name (e.g. '1.44M') based on geometry"""
+        for key, fmt in self.FORMATS.items():
+            if fmt['total_sectors'] == self.total_sectors:
+                return key
+        
+        # Fallback
+        capacity = self.get_total_capacity()
+        if capacity >= 1024 * 1024:
+            return f"{capacity / (1024 * 1024):.2f}MB"
+        else:
+            return f"{capacity / 1024:.0f}KB"
 
     def get_fat_entry_count(self) -> int:
         """
@@ -767,13 +780,13 @@ class FAT12Image:
         return bytes(data[:entry['size']])
     
     @staticmethod
-    def create_empty_image(filepath: str, format_key: str = '1.44M', oem_name: str = 'MSDOS5.0'):
+    def create_empty_image(filepath: str, format_key: str = '1.44MB', oem_name: str = 'MSDOS5.0'):
         """
         Create a blank FAT12 floppy disk image.
 
         Args:
             filepath: Path to save the new image.
-            format_key: Floppy format key (e.g., '1.44M').
+            format_key: Floppy format key (e.g., '1.44MB').
             oem_name: OEM name string for the boot sector.
         """
         if format_key not in FAT12Image.FORMATS:

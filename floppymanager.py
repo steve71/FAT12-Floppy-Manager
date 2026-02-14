@@ -919,7 +919,8 @@ class FloppyManagerWindow(QMainWindow):
                         else:
                             file_count += 1
 
-                self.info_label.setText(f"{file_count} files | {self.image.get_free_space():,} bytes free")
+                fmt_name = self.image.get_format_name()
+                self.info_label.setText(f"{fmt_name} | {file_count} files | {self.image.get_free_space():,} bytes free")
                 self.status_bar.showMessage(f"Loaded {file_count} files")
             
             except FAT12CorruptionError as e:
