@@ -861,11 +861,8 @@ class FloppyManagerWindow(QMainWindow):
                 except Exception as e:
                     self.logger.warning(f"Failed to cleanup temp dir: {e}")
             self._last_copy_temp_dir = None
+            self._clipboard_source_cluster = None
             QApplication.clipboard().clear()
-        
-        # Invalidate source cluster for copy operations from previous image
-        # This prevents "Duplicate" behavior (auto-rename) when pasting from a previous image
-        self._clipboard_source_cluster = object()
         
         try:
             self.image = FAT12Image(filepath)
@@ -1036,6 +1033,9 @@ class FloppyManagerWindow(QMainWindow):
                             if (search_text not in entry['name'].lower() and 
                                 search_text not in entry['short_name'].lower()):
                                 continue
+                        
+                        # Add parent_cluster to entry for later use in cut/copy/paste operations
+                        entry['parent_cluster'] = cluster
 
                         # Create item
                         if parent_item:
@@ -1766,7 +1766,11 @@ class FloppyManagerWindow(QMainWindow):
         # Store source cluster to determine if we are pasting into the same folder later
         if selected_items:
             first_entry = selected_items[0].data(0, Qt.ItemDataRole.UserRole)
-            self._clipboard_source_cluster = self._normalize_parent_cluster(first_entry.get('parent_cluster'))
+            if first_entry:
+                # parent_cluster is now always present in entries (set in refresh_file_list)
+                self._clipboard_source_cluster = self._normalize_parent_cluster(first_entry.get('parent_cluster'))
+            else:
+                self._clipboard_source_cluster = None
         else:
             self._clipboard_source_cluster = None
 
