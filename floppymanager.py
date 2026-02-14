@@ -1106,6 +1106,7 @@ class FloppyManagerWindow(QMainWindow):
 
         if success_count > 0:
             self.status_bar.showMessage(f"Added {success_count} file(s)")
+            self.logger.info(f"Successfully added {success_count} file(s)")
         if fail_count > 0:
             QMessageBox.warning(self, "Warning", f"Failed to add {fail_count} file(s)")
             
@@ -1396,6 +1397,7 @@ class FloppyManagerWindow(QMainWindow):
 
         if success_count > 0:
             self.status_bar.showMessage(f"Deleted {success_count} item(s)")
+            self.logger.info(f"Successfully deleted {success_count} item(s)")
 
     def copy_selected(self):
         """Copy the selected file"""
@@ -1506,6 +1508,7 @@ class FloppyManagerWindow(QMainWindow):
         self.refresh_file_list()
         if success_count > 0:
             self.status_bar.showMessage(f"Deleted {success_count} item(s)")
+            self.logger.info(f"Successfully deleted {success_count} item(s)")
 
     def create_new_image(self):
         """Create a new blank floppy disk image"""
@@ -1582,6 +1585,7 @@ class FloppyManagerWindow(QMainWindow):
             )
 
             self.status_bar.showMessage(f"Saved as: {Path(filename).name}")
+            self.logger.info(f"Image saved as: {filename}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save image: {e}")
 
@@ -1679,6 +1683,7 @@ class FloppyManagerWindow(QMainWindow):
             self.image_path = None
             self.setWindowTitle("FloppyManager")
             self.refresh_file_list()
+            self.logger.info("Image closed")
             self.status_bar.showMessage("Image closed")
 
     def view_log(self):

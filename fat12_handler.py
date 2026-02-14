@@ -320,6 +320,7 @@ class FAT12Image:
                 f.seek(offset)
                 read_data = f.read(len(fat_data))
                 if read_data != fat_data:
+                    logger.critical(f"FAT write verification failed for FAT #{i+1}")
                     raise FAT12Error(f"FAT write verification failed for FAT #{i+1}")
     
     def get_fat_entry(self, fat_data: bytearray, cluster: int) -> int:
@@ -734,6 +735,7 @@ class FAT12Image:
         Raises:
             FAT12CorruptionError: If the cluster chain is broken or loops.
         """
+        logger.debug(f"Extracting file '{entry.get('name')}' (Size: {entry.get('size')})")
         data = bytearray()
         
         with open(self.image_path, 'rb') as f:

@@ -961,6 +961,19 @@ def set_entry_attributes(fs, entry: dict, is_read_only: bool = None,
         
         # Write back if changed
         if new_attr != current_attr:
+            # Log specific changes
+            changes = []
+            if is_read_only is not None and (current_attr & 0x01) != (new_attr & 0x01):
+                changes.append("+RO" if new_attr & 0x01 else "-RO")
+            if is_hidden is not None and (current_attr & 0x02) != (new_attr & 0x02):
+                changes.append("+HID" if new_attr & 0x02 else "-HID")
+            if is_system is not None and (current_attr & 0x04) != (new_attr & 0x04):
+                changes.append("+SYS" if new_attr & 0x04 else "-SYS")
+            if is_archive is not None and (current_attr & 0x20) != (new_attr & 0x20):
+                changes.append("+ARC" if new_attr & 0x20 else "-ARC")
+            
+            logger.info(f"Updated attributes for '{entry.get('name', '?')}': {', '.join(changes)}")
+            
             f.seek(offset + DIR_ATTR_OFFSET)
             f.write(bytes([new_attr]))
             f.flush()

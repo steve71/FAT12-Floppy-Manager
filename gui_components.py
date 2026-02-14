@@ -1122,6 +1122,7 @@ class FileTreeWidget(QTreeWidget):
                     
                     main_window.refresh_file_list()
                     main_window.status_bar.showMessage(f"Moved {deleted_count} file(s)")
+                    logger.info(f"Moved {deleted_count} file(s) via drag and drop")
                 elif is_internal and is_copy and success_count > 0:
                     main_window.status_bar.showMessage(f"Copied {success_count} file(s)")
         else:
