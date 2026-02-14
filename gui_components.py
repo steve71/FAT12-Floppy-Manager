@@ -1212,6 +1212,7 @@ class NewImageDialog(QDialog):
         self.oem_input.setText(self.oem_name)
         self.oem_input.setPlaceholderText("MSDOS5.0")
         self.oem_input.setToolTip("MSDOS5.0 is recommended for maximum compatibility.")
+        self.oem_input.setFocus()
         self.oem_input.selectAll()
         layout.addWidget(self.oem_input)
         

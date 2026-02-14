@@ -17,13 +17,10 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from vfat_utils import format_83_name, decode_fat_datetime
-
-
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTreeWidget, QFileDialog, QMessageBox, QLabel, QStatusBar, QMenu,
-    QDialog, QToolBar, QStyle, QInputDialog, QHeaderView, QLineEdit
+    QDialog, QToolBar, QStyle, QHeaderView, QLineEdit
 )
 from PySide6.QtCore import Qt, QSettings, QTimer, QSize
 from PySide6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, QColor
@@ -31,6 +28,7 @@ from PySide6.QtGui import QIcon, QAction, QKeySequence, QActionGroup, QPalette, 
 # Import the FAT12 handler
 from fat12_handler import FAT12Image
 from fat12_directory import FAT12Error, FAT12CorruptionError
+from vfat_utils import format_83_name, decode_fat_datetime
 from gui_components import (
     BootSectorViewer, DirectoryViewer, FATViewer, FileAttributesDialog,
     SortableTreeWidgetItem, FileTreeWidget, RenameDelegate, FormatDialog,
@@ -335,6 +333,12 @@ class FloppyManagerWindow(QMainWindow):
         new_action.setToolTip("Create a new blank floppy disk image")
         new_action.triggered.connect(self.create_new_image)
         file_menu.addAction(new_action)
+
+        new_folder_action = QAction("New &Folder", self)
+        new_folder_action.setShortcut("Ctrl+Shift+N")
+        new_folder_action.setToolTip("Create a new folder")
+        new_folder_action.triggered.connect(self.create_new_folder)
+        file_menu.addAction(new_folder_action)
 
         open_action = QAction("&Open Image...", self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
@@ -1119,41 +1123,58 @@ class FloppyManagerWindow(QMainWindow):
                     if parent_cluster == 0:
                         parent_cluster = None
         
-        # Ask for folder name
-        name, ok = QInputDialog.getText(self, "New Folder", "Folder Name:")
-        if ok:
-            name = name.strip()
-            if not name:
-                QMessageBox.warning(self, "Invalid Name", "Folder name cannot be empty.")
-                return
+        name = "New Folder"
+        try:
+            # Generate unique default name
+            entries = self.image.read_directory(parent_cluster)
+            existing_names = {e['name'].lower() for e in entries}
+            
+            base_name = "New Folder"
+            name = base_name
+            counter = 2
+            while name.lower() in existing_names:
+                name = f"{base_name} ({counter})"
+                counter += 1
 
-            invalid_chars = '<>:"/\\|?*'
-            if any(c in name for c in invalid_chars):
-                QMessageBox.warning(self, "Invalid Name", f"Folder name cannot contain characters: {invalid_chars}")
-                return
+            self.image.create_directory(name, parent_cluster, self.use_numeric_tail)
+            self.refresh_file_list()
+            self.status_bar.showMessage(f"Created folder: {name}")
+            self.logger.info(f"Created directory: {name}")
+            
+            # Find and select the new folder to start renaming
+            items = self.table.findItems(name, Qt.MatchFlag.MatchRecursive | Qt.MatchFlag.MatchExactly, 0)
+            
+            target_item = None
+            for item in items:
+                entry = item.data(0, Qt.ItemDataRole.UserRole)
+                if entry:
+                    item_parent = entry.get('parent_cluster')
+                    if item_parent == 0: item_parent = None
+                    
+                    if item_parent == parent_cluster:
+                        target_item = item
+                        break
+            
+            if target_item:
+                # Ensure parent is expanded so the new item is visible
+                parent_item = target_item.parent()
+                while parent_item:
+                    parent_item.setExpanded(True)
+                    parent_item = parent_item.parent()
 
-        if ok:
-            name = name.strip()
-            if not name:
-                QMessageBox.warning(self, "Invalid Name", "Folder name cannot be empty.")
-                return
+                self.table.clearSelection()
+                target_item.setSelected(True)
+                self.table.setCurrentItem(target_item)
+                self.table.scrollToItem(target_item)
+                # Start rename
+                self.start_rename()
 
-            invalid_chars = '<>:"/\\|?*'
-            if any(c in name for c in invalid_chars):
-                QMessageBox.warning(self, "Invalid Name", f"Folder name cannot contain characters: {invalid_chars}")
-                return
-
-            try:
-                self.image.create_directory(name, parent_cluster, self.use_numeric_tail)
-                self.refresh_file_list()
-                self.status_bar.showMessage(f"Created folder: {name}")
-                self.logger.info(f"Created directory: {name}")
-            except FAT12CorruptionError as e:
-                self.logger.error(f"Corruption detected creating directory {name}: {e}")
-                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot create directory:\n{e}")
-            except FAT12Error as e:
-                self.logger.warning(f"Failed to create directory {name}: {e}")
-                QMessageBox.critical(self, "Error", f"Failed to create directory: {e}")
+        except FAT12CorruptionError as e:
+            self.logger.error(f"Corruption detected creating directory {name}: {e}")
+            QMessageBox.critical(self, "Filesystem Corruption", f"Cannot create directory:\n{e}")
+        except FAT12Error as e:
+            self.logger.warning(f"Failed to create directory {name}: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to create directory: {e}")
 
     def extract_selected(self):
         """Extract selected files"""
