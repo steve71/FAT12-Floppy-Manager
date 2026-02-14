@@ -119,6 +119,7 @@ Verified to work on my Yamaha DGX-500 keyboard and Gotek SFR1M44-U100LQD 3.5inch
 - **Boot Sector info** - View boot sector information
 - **Root Directory info** - View complete root directory information with timestamps
 - **FAT Viewer** - View File Allocation Table as a grid with cluster chains
+- **Log Viewer** - View application logs for debugging and tracking operations
 
 ### Settings
 - **Confirmations** - Toggle on/off for delete/replace

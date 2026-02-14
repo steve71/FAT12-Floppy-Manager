@@ -1661,6 +1661,7 @@ class FloppyManagerWindow(QMainWindow):
         <tr>
         <td valign="top" width="50%">
         <ul>
+        <li>Modern UI with Toolbar and Light/Dark themes</li>
         <li>FAT12 filesystem support with VFAT long filenames</li>
         <li>Windows-compatible 8.3 name generation</li>
         <li>Toggleable numeric tail mode</li>
@@ -1685,7 +1686,7 @@ class FloppyManagerWindow(QMainWindow):
         <li>Defragment disk</li>
         <li>Search/Filter files by filename</li>
         <li>Boot Sector, Root Dir & FAT Viewers</li>
-        <li>Modern UI with Toolbar and Light/Dark themes</li>
+        <li>Log Viewer</li>
         <li>Remembers last opened image and settings</li>
         </ul>
         </td>
@@ -1703,7 +1704,7 @@ class FloppyManagerWindow(QMainWindow):
         <li>Del/Backspace - Delete selected files</li>
         </ul>
 
-        <p><small>© 2026 Stephen P Smith | MIT License</small></p>
+        <p align="center"><small>© 2026 Stephen P Smith | MIT License</small></p>
         """
         QMessageBox.about(self, "About", about_text)
 
