@@ -149,7 +149,7 @@ class FloppyManagerWindow(QMainWindow):
         # File Tree
         self.table = FileTreeWidget()
         self.table.setColumnCount(6)
-        self.table.setHeaderLabels(['Filename', 'Short Name (8.3)', 'Date Modified', 'Type', 'Size', 'Attr'])
+        self.table.setHeaderLabels(['Filename', '8.3 Name', 'Date Modified', 'Type', 'Size', 'Attr'])
 
         # Configure tree
         self.table.setAlternatingRowColors(True)
