@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QTreeWidget, QTreeWidgetItem, QStyledItemDelegate, QLineEdit, QComboBox,
     QRadioButton, QDialogButtonBox, QMessageBox, QTextEdit, QCheckBox
 )
-from PySide6.QtCore import Qt, QSize, QTimer, QMimeData, QUrl, QSettings
+from PySide6.QtCore import Qt, QSize, QTimer, QMimeData, QUrl, QSettings, QFileSystemWatcher
 from PySide6.QtGui import QColor, QPalette, QDrag, QTextCursor
 
 # Import the FAT12 handler
@@ -1249,6 +1249,7 @@ class LogViewer(QDialog):
     """Dialog to view application log"""
     def __init__(self, log_path, parent=None):
         super().__init__(parent)
+        self.log_path = log_path
         self.setWindowTitle("Application Log")
         self.resize(800, 600)
         
@@ -1271,12 +1272,18 @@ class LogViewer(QDialog):
         layout.addWidget(self.text_edit)
         
         # Load log
-        self.load_log(log_path)
+        self.load_log(self.log_path)
+        
+        # Setup watcher for real-time updates
+        # Use absolute path to ensure watcher works correctly
+        abs_path = str(Path(self.log_path).resolve())
+        self.watcher = QFileSystemWatcher([abs_path], self)
+        self.watcher.fileChanged.connect(lambda p: self.load_log(self.log_path))
         
         # Buttons
         btn_layout = QHBoxLayout()
         refresh_btn = QPushButton("Refresh")
-        refresh_btn.clicked.connect(lambda: self.load_log(log_path))
+        refresh_btn.clicked.connect(lambda: self.load_log(self.log_path))
         btn_layout.addWidget(refresh_btn)
         
         self.wrap_cb = QCheckBox("Word Wrap")
