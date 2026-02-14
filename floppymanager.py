@@ -462,10 +462,6 @@ class FloppyManagerWindow(QMainWindow):
         copy_action.triggered.connect(self.copy_to_clipboard)
         edit_menu.addAction(copy_action)
 
-        paste_action = QAction("&Paste", self)
-        paste_action.setShortcut(QKeySequence.StandardKey.Paste)
-        paste_action.triggered.connect(self.paste_from_clipboard)
-        edit_menu.addAction(paste_action)
         self.paste_action = QAction("&Paste", self)
         self.paste_action.setShortcut(QKeySequence.StandardKey.Paste)
         self.paste_action.triggered.connect(self.paste_from_clipboard)
@@ -907,6 +903,25 @@ class FloppyManagerWindow(QMainWindow):
         
             for col in range(item.columnCount()):
                 item.setForeground(col, color)
+
+    def _undim_all_items(self):
+        """Undim all items in the tree"""
+        # Helper to recursively undim
+        def undim_recursive(item):
+            # Restore text color
+            color = QColor(self.palette().text().color())
+            for col in range(item.columnCount()):
+                item.setForeground(col, color)
+            # Restore icon (refresh from entry data)
+            entry = item.data(0, Qt.ItemDataRole.UserRole)
+            if entry:
+                item.setIcon(0, self.icon_provider.get_icon(entry))
+            
+            for i in range(item.childCount()):
+                undim_recursive(item.child(i))
+
+        for i in range(self.table.topLevelItemCount()):
+            undim_recursive(self.table.topLevelItem(i))
 
     def refresh_file_list(self):
         """Refresh the file list from the image"""
@@ -1564,6 +1579,11 @@ class FloppyManagerWindow(QMainWindow):
         if success_count > 0:
             self.status_bar.showMessage(f"Deleted {success_count} item(s)")
             self.logger.info(f"Successfully deleted {success_count} item(s)")
+            
+            # Clear cut selection if we just deleted files, to avoid confusion/errors
+            if self._cut_entries:
+                self._cut_entries = []
+                QApplication.clipboard().clear()
 
     def duplicate_selected(self):
         """Duplicate the selected file(s) inside the image"""
@@ -1637,7 +1657,8 @@ class FloppyManagerWindow(QMainWindow):
         selected_items = self.table.selectedItems()
         for item in selected_items:
             entry = item.data(0, Qt.ItemDataRole.UserRole)
-            if entry:
+            # Only cut files, as we don't support folder copy/paste yet
+            if entry and not entry['is_dir']:
                 self._cut_entries.append(entry)
                 self._dim_item(item, True)
         
@@ -1651,6 +1672,10 @@ class FloppyManagerWindow(QMainWindow):
         selected_items = self.table.selectedItems()
         if not selected_items:
             return
+
+        # If we had a pending cut, undim those items visually since this copy cancels the cut
+        if self._cut_entries:
+            self._undim_all_items()
 
         # Clear any pending cut operation since we are doing a new copy
         self._cut_entries = []
@@ -1701,6 +1726,26 @@ class FloppyManagerWindow(QMainWindow):
                 if os.path.isfile(fpath):
                     files.append(fpath)
 
+        # Check if these files match our pending cut operation
+        is_internal_cut = False
+        if self._cut_entries and self._last_copy_temp_dir and files:
+            # Check if the first file being pasted is inside our temp dir
+            try:
+                file_parent = Path(files[0]).parent.resolve()
+                temp_parent = Path(self._last_copy_temp_dir).resolve()
+                if file_parent == temp_parent:
+                    is_internal_cut = True
+            except Exception:
+                pass
+        
+        # If we have cut entries but the clipboard files are NOT from our temp dir,
+        # it means the user copied something else externally.
+        # We should cancel the cut operation to prevent deleting the original files.
+        if self._cut_entries and not is_internal_cut:
+            self._cut_entries = []
+            self._undim_all_items()
+            self.status_bar.showMessage("External clipboard content detected. Cut operation cancelled.")
+
         if files:
             # Determine target parent cluster from selection (same logic as add_files_from_list)
             parent_cluster = None
@@ -1742,18 +1787,41 @@ class FloppyManagerWindow(QMainWindow):
                 except Exception:
                     pass
 
+            # If this is a CUT operation, disable rename_on_collision to force prompt/overwrite behavior
+            if self._cut_entries:
+                rename_on_collision = False
+
             # Add files (Copy)
             success_count = self.add_files_from_list(files, parent_cluster, rename_on_collision)
             
             # If this was a cut operation and paste was successful, delete originals
             if self._cut_entries and success_count == len(files):
                 deleted_count = 0
+                
+                # Group entries by parent cluster to minimize directory reads during verification
+                entries_by_parent = {}
                 for entry in self._cut_entries:
+                    pc = entry.get('parent_cluster')
+                    if pc == 0: pc = None
+                    if pc not in entries_by_parent:
+                        entries_by_parent[pc] = []
+                    entries_by_parent[pc].append(entry)
+
+                for pc, entries in entries_by_parent.items():
                     try:
-                        self.image.delete_file(entry)
-                        deleted_count += 1
+                        # Verify files still exist and match before deleting (prevents corruption if moved/deleted)
+                        current_dir_entries = self.image.read_directory(pc)
+                        current_map = {e['index']: e for e in current_dir_entries}
+
+                        for entry in entries:
+                            match = current_map.get(entry['index'])
+                            if match and match['name'] == entry['name'] and match['cluster'] == entry['cluster']:
+                                self.image.delete_file(entry)
+                                deleted_count += 1
+                            else:
+                                self.logger.warning(f"Skipping delete of cut file {entry['name']}: File no longer exists at source.")
                     except Exception as e:
-                        self.logger.warning(f"Failed to delete cut file {entry['name']}: {e}")
+                        self.logger.warning(f"Error processing cut deletion for parent {pc}: {e}")
                 
                 self._cut_entries = [] # Clear after move
                 QApplication.clipboard().clear()
@@ -1934,6 +2002,16 @@ class FloppyManagerWindow(QMainWindow):
             self.image = None
             self.image_path = None
             self.setWindowTitle("FloppyManager")
+            
+            # Clear any pending cut/copy state to prevent cross-image operations
+            self._cut_entries = []
+            QApplication.clipboard().clear()
+            if self._last_copy_temp_dir and os.path.exists(self._last_copy_temp_dir):
+                try:
+                    shutil.rmtree(self._last_copy_temp_dir)
+                except:
+                    pass
+            
             self.refresh_file_list()
             self.logger.info("Image closed")
             self.status_bar.showMessage("Image closed")
