@@ -275,12 +275,6 @@ class FloppyManagerWindow(QMainWindow):
         delete_action.triggered.connect(self.delete_selected)
         toolbar.addAction(delete_action)
 
-        # Delete All
-        delete_all_action = QAction(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton), "Del. All", self)
-        delete_all_action.setStatusTip("Delete all files from the disk")
-        delete_all_action.triggered.connect(self.delete_all)
-        toolbar.addAction(delete_all_action)
-
     def show_context_menu(self, position):
         """Show context menu for table"""
         if not self.image:
@@ -1444,63 +1438,6 @@ class FloppyManagerWindow(QMainWindow):
             self.logger.error(f"Unexpected error copying file {entry['name']}: {e}", exc_info=True)
             QMessageBox.critical(self, "Error", f"Failed to copy file: {e}")
 
-    def delete_all(self):
-        """Delete all files"""
-        if not self.image:
-            QMessageBox.information(self, "No Image Loaded", "No image loaded.")
-            return
-
-        entries = self.image.read_root_directory()
-        items_to_delete = entries
-
-        if not items_to_delete:
-            QMessageBox.information(self, "Info", "Disk is already empty")
-            return
-
-        if self.confirm_delete:
-            response = QMessageBox.question(
-                self,
-                "Confirm Delete All",
-                f"Delete ALL {len(items_to_delete)} item(s) from the disk image?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if response == QMessageBox.StandardButton.No:
-                return
-
-        self.logger.info(f"User requested delete ALL ({len(items_to_delete)} items)")
-        # Check for read-only items
-        read_only_items = [e for e in items_to_delete if e['is_read_only']]
-        if read_only_items:
-            msg = f"{len(read_only_items)} of the items are Read-Only.\n\nDo you want to delete them anyway?"
-            response = QMessageBox.warning(
-                self,
-                "Read-Only Items",
-                msg,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if response == QMessageBox.StandardButton.No:
-                return
-
-        success_count = 0
-        for entry in items_to_delete:
-            try:
-                if entry['is_dir']:
-                    self.image.delete_directory(entry, recursive=True)
-                else:
-                    self.image.delete_file(entry)
-                success_count += 1
-            except FAT12CorruptionError as e:
-                self.logger.error(f"Corruption deleting {entry['name']}: {e}")
-                QMessageBox.critical(self, "Filesystem Corruption", f"Cannot delete {entry['name']}:\n{e}")
-            except FAT12Error as e:
-                self.logger.warning(f"Failed to delete {entry['name']}: {e}")
-                pass # Skip failed deletions in bulk op
-
-        self.refresh_file_list()
-        if success_count > 0:
-            self.status_bar.showMessage(f"Deleted {success_count} item(s)")
-            self.logger.info(f"Successfully deleted {success_count} item(s)")
-
     def create_new_image(self):
         """Create a new blank floppy disk image"""
         # Ask for format and OEM Name
@@ -1720,7 +1657,7 @@ class FloppyManagerWindow(QMainWindow):
         <li>Drag and drop support (Hold Ctrl to copy)</li>
         <li>View and edit file attributes</li>
         <li>Rename files (Windows-style inline)</li>
-        <li>Delete files (selected or all)</li>
+        <li>Delete files</li>
         <li>Extract files (selected, all, or to ZIP)</li>
         <li>Format disk</li>
         <li>Defragment disk</li>
