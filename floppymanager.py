@@ -1483,13 +1483,7 @@ class FloppyManagerWindow(QMainWindow):
                 if deleted_set & cut_set:  # If there's any overlap
                     self.logger.info("Clearing cut selection due to file deletion")
                     self._cut_entries = []
-                    if self._last_copy_temp_dir and os.path.exists(self._last_copy_temp_dir):
-                        try:
-                            shutil.rmtree(self._last_copy_temp_dir)
-                        except Exception as e:
-                            self.logger.warning(f"Failed to cleanup temp dir: {e}")
-                        finally:
-                            self._last_copy_temp_dir = None
+                    self.clipboard_mgr.cleanup()
                     QApplication.clipboard().clear()
 
     def duplicate_selected(self):
