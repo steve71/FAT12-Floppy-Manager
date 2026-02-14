@@ -4,7 +4,7 @@
 
 A modern, easy-to-use tool for creating and managing FAT12 floppy disk images (.img) used with Gotek/FlashFloppy drives in vintage piano keyboards. Eliminates the hassle of mounting virtual disks—simply create an image, drag and drop your files, and copy to USB. Verified working with Yamaha DGX-500 + Gotek SFR1M44-U100LQD (FlashFloppy firmware)
 
-<img width="899" height="664" alt="image" src="https://github.com/user-attachments/assets/881d088a-85ae-4c4a-8bdc-361ac8ad08c1" />
+<img width="895" height="676" alt="image" src="https://github.com/user-attachments/assets/0fb766c5-11e4-4910-9453-1cf2a086d1ac" />
 
 ---
 
