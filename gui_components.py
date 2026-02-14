@@ -967,7 +967,7 @@ class FileTreeWidget(QTreeWidget):
             drag.setMimeData(mime_data)
             
             # Execute drag - blocks until drop is finished
-            drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction)
+            drag.exec(Qt.DropAction.CopyAction | Qt.DropAction.MoveAction, Qt.DropAction.MoveAction)
             
         finally:
             # Cleanup temp dir after drag is done
@@ -984,13 +984,18 @@ class FileTreeWidget(QTreeWidget):
 
     def dragMoveEvent(self, event):
         if event.mimeData().hasUrls():
-            # Check for Ctrl key to toggle Copy/Move
+            # Default to Copy
+            action = Qt.DropAction.CopyAction
+            
+            # If internal drag, default to Move
+            if event.mimeData().hasFormat("application/x-fat12-item"):
+                action = Qt.DropAction.MoveAction
+            
+            # If Ctrl is held, force Copy
             if event.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier:
-                event.setDropAction(Qt.DropAction.CopyAction)
-            elif event.mimeData().hasFormat("application/x-fat12-item"):
-                event.setDropAction(Qt.DropAction.MoveAction)
-            else:
-                event.setDropAction(Qt.DropAction.CopyAction)
+                action = Qt.DropAction.CopyAction
+                
+            event.setDropAction(action)
             event.accept()
         else:
             super().dragMoveEvent(event)
@@ -1018,8 +1023,13 @@ class FileTreeWidget(QTreeWidget):
                 # Check for internal drag
                 is_internal = event.mimeData().hasFormat("application/x-fat12-item")
                 
-                # Check for Copy modifier (Ctrl key)
-                is_copy = (event.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier) != 0
+                # Determine if we should Copy or Move
+                # Default to Copy (external files)
+                is_copy = True
+                
+                # If internal drag and Ctrl NOT held, it's a Move
+                if is_internal and not (event.keyboardModifiers() & Qt.KeyboardModifier.ControlModifier):
+                    is_copy = False
                 
                 # Determine target directory
                 target_item = self.itemAt(event.position().toPoint())
