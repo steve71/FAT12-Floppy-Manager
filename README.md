@@ -147,5 +147,4 @@ The project includes a comprehensive suite of unit tests ensuring reliability fo
 
 ## License
 
-Copyright 2026 Stephen P Smith
-MIT License 
+© 2026 Stephen P Smith | MIT License | [Support Development ☕](https://ko-fi.com/steve71887)
