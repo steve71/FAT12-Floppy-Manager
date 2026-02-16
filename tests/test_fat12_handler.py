@@ -120,7 +120,7 @@ class TestClusterManagement:
         all_free = handler.find_free_clusters(count=None)
         
         # Total clusters on a 1.44MB floppy is 2847. We used 2.
-        total_clusters = handler.total_data_sectors // handler.sectors_per_cluster
+        total_clusters = handler.total_clusters
         assert len(all_free) == total_clusters - 2
         assert 10 not in all_free
         assert 20 not in all_free
@@ -131,9 +131,7 @@ class TestClusterManagement:
         fat_data = handler.read_fat()
         
         # Calculate total clusters available
-        non_data_sectors = handler.data_start // handler.bytes_per_sector
-        total_data_sectors = handler.total_sectors - non_data_sectors
-        total_clusters = total_data_sectors // handler.sectors_per_cluster
+        total_clusters = handler.total_clusters
         
         # Mark all clusters as EOF (0xFFF)
         for cluster in range(2, total_clusters + 2):

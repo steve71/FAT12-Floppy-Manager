@@ -4,7 +4,6 @@
 # MIT License
 
 from PySide6.QtGui import QPalette, QColor
-from PySide6.QtWidgets import QApplication
 
 def get_dark_palette():
     palette = QPalette()

@@ -217,12 +217,12 @@ class FAT12Image:
         # Calculate number of clusters in the data area
         non_data_sectors = self.data_start // self.bytes_per_sector
         self.total_data_sectors = self.total_sectors - non_data_sectors
-        num_data_clusters = self.total_data_sectors // self.sectors_per_cluster
+        self.total_clusters = self.total_data_sectors // self.sectors_per_cluster
 
         # Microsoft FAT Type thresholds
-        if num_data_clusters < 4085:
+        if self.total_clusters < 4085:
             self.fat_type = 'FAT12'
-        elif num_data_clusters < 65525:
+        elif self.total_clusters < 65525:
             self.fat_type = 'FAT16'
         else:
             self.fat_type = 'FAT32'
@@ -493,9 +493,7 @@ class FAT12Image:
         fat_data = self.read_fat()
         free_clusters = []
         
-        total_clusters = (self.total_sectors - (self.data_start // self.bytes_per_sector)) // self.sectors_per_cluster
-        
-        for cluster in range(2, total_clusters + 2):
+        for cluster in range(2, self.total_clusters + 2):
             if self.get_fat_entry(fat_data, cluster) == 0:
                 free_clusters.append(cluster)
                 if count is not None and len(free_clusters) >= count:
@@ -570,7 +568,7 @@ class FAT12Image:
         """
         fat_data = self.read_fat()
         # Calculate max cluster based on data area size
-        max_cluster = (self.total_data_sectors // self.sectors_per_cluster) + 2
+        max_cluster = self.total_clusters + 2
         
         # If cluster is bad or reserved, don't try to trace chain
         if cluster == 0xFF7 or cluster < 2:
